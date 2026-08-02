@@ -33,3 +33,23 @@ def _is_excluded(rel: str, pattern: str) -> bool:
     if pattern.startswith("**/"):
         return fnmatch(rel, pattern[3:])
     return False
+
+
+def get_decorator_call(node: ast.FunctionDef | ast.AsyncFunctionDef, name_suffix: str) -> ast.Call | None:
+    #Return the decorator call whose attribute matches `method_name` exactly.
+    #(e.g. method_name="get" matches both `@router.get(...)` and `@app.get(...)`)
+    
+    for decorator in node.decorator_list:
+        if isinstance(decorator, ast.Call):
+            func = decorator.func
+            if isinstance(func, ast.Attribute) and func.attr == name_suffix:
+                return decorator
+    return None
+
+def literal_or_none(node: ast.expr | None):
+    if node is None:
+        return None
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, SyntaxError):
+        return None
