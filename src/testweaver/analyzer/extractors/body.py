@@ -69,7 +69,7 @@ def collect_constraints(
     """모델 하나의 필드를 제약으로 바꾼다. 상속과 중첩을 따라간다."""
     if model in seen or depth > _MAX_NESTING:
         return []
-    seen.add(model)
+    branch_seen = {*seen, model}
 
     classes = context.index.class_mro(model)
     if not classes:
@@ -103,7 +103,7 @@ def collect_constraints(
                     annotation=annotation,
                     assigned=assigned,
                     has_validator=name in validated,
-                    seen=seen,
+                    seen=branch_seen,
                     depth=depth,
                 )
             )
@@ -120,7 +120,7 @@ def _constraints_for(
     seen: set[SymbolRef],
     depth: int,
 ) -> list[Constraint]:
-    info = unwrap_annotation(annotation)
+    info = context.index.annotation(owner.module.path, annotation)
     marker = _field_marker(assigned, info.metadata)
     declared = _resolve_default(marker, assigned)
 
