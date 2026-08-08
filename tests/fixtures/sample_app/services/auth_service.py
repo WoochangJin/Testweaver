@@ -19,7 +19,5 @@ def authenticate(payload: LoginRequest) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED, detail="INVALID_CREDENTIALS"
         )
     if payload.password == "locked123":
-        raise HTTPException(
-            status_code=status.HTTP_423_LOCKED, detail="ACCOUNT_LOCKED"
-        )
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="ACCOUNT_LOCKED")
     return "issued-token"

@@ -55,7 +55,9 @@ def test_query_and_path_parameters_are_declared():
 
     order_params = {
         p["name"]: p
-        for p in app.openapi()["paths"]["/api/v1/orders/{order_id}"]["get"]["parameters"]
+        for p in app.openapi()["paths"]["/api/v1/orders/{order_id}"]["get"][
+            "parameters"
+        ]
     }
     assert order_params["order_id"]["in"] == "path"
     assert order_params["order_id"]["required"] is True
