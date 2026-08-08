@@ -29,3 +29,6 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "parity: OpenAPI 스펙과의 대조 (보조 검증). `-m 'not parity'` 로 제외 가능",
+]
