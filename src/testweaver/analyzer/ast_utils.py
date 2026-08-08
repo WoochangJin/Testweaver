@@ -319,6 +319,15 @@ def _unwrap(node: ast.expr, info: AnnotationInfo) -> None:
         info.is_optional = True
         return
 
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        # 전방 참조. `child: "Node | None"` 처럼 타입이 문자열로 적힌다.
+        # 자기 자신을 품는 모델은 이 형태가 아니면 쓸 수 없다.
+        try:
+            _unwrap(ast.parse(node.value, mode="eval").body, info)
+        except SyntaxError:
+            pass
+        return
+
     if isinstance(node, ast.Name):
         if node.id == "None":
             info.is_optional = True
