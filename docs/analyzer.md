@@ -1,129 +1,68 @@
-# TestWeaver Analyzer 안내서
+# TestWeaver Analyzer
 
-## 한눈에 보기
+TestWeaver Analyzer는 FastAPI 프로젝트를 정적으로 분석하여 테스트 설계에 필요한
+구조화 데이터를 생성하는 모듈입니다. Python 표준 `ast` 모듈을 사용하며, 분석
+대상 애플리케이션을 import하거나 실행하지 않습니다.
 
-Analyzer는 FastAPI 프로젝트의 Python 파일을 **실행하지 않고** AST로 읽어
-테스트 설계에 필요한 정보를 추출합니다.
+## 1. 역할과 범위
 
-입력은 프로젝트 디렉터리이고, 출력은 다음 정보를 담은 `AnalysisResult` 또는
-JSON입니다.
+Analyzer는 다음 정보를 추출합니다.
 
-- 실제 prefix가 합쳐진 엔드포인트 경로와 HTTP 메서드
-- 성공 상태 코드와 요청·응답 모델
+- 최종 prefix가 적용된 API 경로와 HTTP 메서드
+- 요청 및 응답 모델
 - body, path, query, header, cookie, form 입력 제약
-- handler, route, router, app에 선언된 의존성
-- 인증과 권한 요구 여부
-- 직접 또는 호출 그래프에서 발생하는 예외와 상태 코드
-- 외부 호출 및 비결정적 동작 후보
-- 정적으로 확정하지 못한 이유를 설명하는 분석 노트
+- handler, route, router, app 수준의 의존성
+- 인증 및 권한 요구 여부
+- handler, 서비스 함수, 의존성에서 발생할 수 있는 예외
+- 외부 시스템 호출과 비결정적 동작 후보
+- 정적으로 확정할 수 없는 항목에 대한 진단 정보
 
-Analyzer는 테스트 코드를 생성하지 않습니다. 테스트 매트릭스와 코드 생성기가
-사용할 수 있는, 정규화된 분석 결과를 만드는 계층입니다.
+Analyzer의 출력은 테스트 매트릭스 및 테스트 코드 생성 단계의 입력으로 사용됩니다.
+다음 작업은 Analyzer의 책임 범위에 포함되지 않습니다.
 
-## 원래 설계 의도와 보존 원칙
+- 테스트 케이스 조합 및 우선순위 결정
+- 테스트 매트릭스 UI 제공
+- pytest 코드 생성
+- 생성된 테스트 실행 및 수정
+- 프로젝트 전체 CLI, 배포 및 패키징 구성
 
-이 절은 현재 구현을 새로 해석해 붙인 설명이 아니라, 처음 작성된 소스의
-모듈 docstring, 모델 주석, 테스트와 `TestWeaver_기획서.md`에서 반복된 의도를
-정리한 것입니다. 이후 analyzer를 수정할 때 지켜야 하는 기준이기도 합니다.
+## 2. 요구 사항
 
-### 1. 대상 프로젝트를 실행하지 않는다
+- Python 3.13 이상
+- 분석 대상: FastAPI 및 Pydantic 기반 Python 프로젝트
+- 입력 형식: 프로젝트 루트 디렉터리
+- 출력 형식: `AnalysisResult` 또는 JSON
 
-Analyzer의 가장 중요한 경계는 **순수 AST 정적 분석**입니다. FastAPI 앱을
-import하거나 실행해서 결과를 얻지 않습니다. 분석 대상의 startup hook, DB 연결,
-환경 변수 접근 같은 부작용이 사용자 머신에서 실행되지 않아야 하기 때문입니다.
+## 3. 빠른 시작
 
-OpenAPI parity 테스트만 정답 비교를 위해 fixture 앱을 실행합니다. 이 코드는
-테스트에만 있고 실제 분석 경로에는 들어가지 않습니다.
+### 명령줄 실행
 
-### 2. 수집과 판정을 분리한다
-
-Pass 0과 Pass 1은 파일과 심볼을 최대한 있는 그대로 수집합니다. 예를 들어
-클래스를 색인하는 단계에서 곧바로 Pydantic 모델이라고 단정하지 않고, 프로젝트
-인덱스가 완성된 뒤 상속 관계와 import를 따라 판정합니다.
-
-이 원칙 때문에 파일 순서에 따라 분석 결과가 달라지지 않고, 다른 파일에 있는
-부모 모델·의존성·예외 처리기도 해석할 수 있습니다.
-
-### 3. 이름이 아니라 심볼의 출처를 보존한다
-
-`LoginRequest`나 `get_current_user` 같은 단순 이름만 저장하면 동명 심볼을
-구분할 수 없고, 다음 단계가 올바른 import 또는 dependency override를 만들 수
-없습니다. 그래서 공개 모델은 `(module, name)`을 가진 `SymbolRef`를 사용합니다.
-
-라우터에서 상속된 의존성도 AST 노드만 전달하지 않고 **어느 모듈에서 선언됐는지**
-함께 전달합니다. 이 정보는 내부 처리용이며 최종 공개 스키마는 기존처럼
-`DependencyNode.source`와 `origin`으로 유지됩니다.
-
-### 4. 확정하지 못한 정보를 성공처럼 꾸미지 않는다
-
-정적 분석은 모든 Python 표현을 해석할 수 없습니다. 이때 임의 기본값이나 빈
-목록으로 덮지 않고 `AnalysisNote`를 남깁니다. 예를 들어 상태 코드 인자는 있지만
-값을 풀지 못했다면 `200`으로 가정하지 않고 `null`과 `UNRESOLVED_STATUS`를
-내보냅니다.
-
-즉, 결과의 빈 값과 “분석하지 못한 값”을 구분할 수 있어야 한다는 것이 원래
-설계 계약입니다.
-
-### 5. 추출기는 독립적으로 확장할 수 있어야 한다
-
-각 extractor는 `ExtractionContext` 하나를 받아 자기 책임만 수행합니다. 실행
-순서는 중앙 목록의 위치가 아니라 `requires` 의존성으로 선언하며 위상 정렬로
-결정합니다. 새 extractor를 추가할 때 기존 extractor의 호출 코드를 다시 엮지
-않는 구조를 유지합니다.
-
-### 6. 하류 단계와의 공개 계약을 안정적으로 유지한다
-
-Analyzer의 공개 계약은 `models.py`의 자료구조와 `serialize.py`의 JSON 형태입니다.
-현재 수정은 이 공개 필드를 삭제하거나 이름을 바꾸지 않았습니다. 라우터 마운트와
-심볼 출처를 정확히 보존하기 위한 `DependencySite`, `RouteVariant`는 내부
-인덱싱 타입이며, 매트릭스·코드 생성 단계가 소비하는 출력 형식은 그대로입니다.
-
-### 이번 수정이 원래 의도를 강화한 부분
-
-| 수정 | 보존하거나 강화한 원래 의도 |
-| --- | --- |
-| 앱·라우터 의존성의 선언 모듈 보존 | 문자열이 아닌 정확한 심볼 출처 유지 |
-| 다중 앱의 의존성 분리 | 실제 FastAPI 구조를 endpoint 단위로 정확히 표현 |
-| 다중 마운트의 경로·의존성·태그 분리 | 하나의 실제 route variant를 하나의 기능으로 표현 |
-| 일반 객체의 `.get()` 데코레이터 제외 | 라우트를 이름만으로 추측하지 않음 |
-| 반복 사용된 중첩 모델을 필드별로 전개 | 재귀 방지와 정상 형제 필드 분석을 구분 |
-| 실행되지 않는 중첩 함수 본문 제외 | 실행 가능 흐름을 과장하지 않는 보수적 분석 |
-| 실패·동적 선언을 노트로 유지 | 불확실성을 조용히 숨기지 않음 |
-
-### analyzer가 의도적으로 맡지 않는 책임
-
-다음 단계는 analyzer의 출력 소비자 또는 다른 모듈의 책임입니다.
-
-- 분석 결과로 정상·경계·예외 테스트 케이스를 조합하는 일
-- 사용자가 선택할 테스트 매트릭스 UI를 만드는 일
-- pytest 코드를 생성하고 프로젝트 스타일에 맞추는 일
-- 생성된 테스트를 실행하고 실패를 수정하는 일
-- 프로젝트 전체 CLI와 배포·패키징 흐름을 완성하는 일
-
-따라서 analyzer 변경은 위 기능을 직접 구현하기보다, 그 기능들이 판단할 수 있는
-근거를 정확하고 설명 가능한 형태로 제공하는 데 집중해야 합니다.
-
-## 실행 방법
-
-요약만 확인:
+분석 요약을 출력합니다.
 
 ```powershell
-.\.venv\Scripts\python.exe -m testweaver.analyzer path\to\fastapi-project --summary
+uv run python -m testweaver.analyzer path\to\project --summary
 ```
 
-JSON을 화면에 출력:
+전체 분석 결과를 JSON으로 출력합니다.
 
 ```powershell
-.\.venv\Scripts\python.exe -m testweaver.analyzer path\to\fastapi-project
+uv run python -m testweaver.analyzer path\to\project
 ```
 
-JSON 파일로 저장:
+분석 결과를 파일로 저장합니다.
 
 ```powershell
-.\.venv\Scripts\python.exe -m testweaver.analyzer path\to\fastapi-project -o analysis.json
+uv run python -m testweaver.analyzer path\to\project --output analysis.json
 ```
 
-Python 코드에서는 다음과 같이 사용합니다.
+`uv`를 사용하지 않는 환경에서는 활성화된 Python 환경에서 동일한 모듈을
+실행할 수 있습니다.
+
+```powershell
+python -m testweaver.analyzer path\to\project --summary
+```
+
+### Python API
 
 ```python
 from pathlib import Path
@@ -131,44 +70,138 @@ from pathlib import Path
 from testweaver.analyzer.pipeline import analyze_project
 from testweaver.analyzer.serialize import dumps
 
-result = analyze_project(Path("path/to/fastapi-project"))
+result = analyze_project(Path("path/to/project"))
 print(dumps(result))
 ```
 
-분석 루트가 없으면 예외로 중단하지 않고 오류 노트를 반환하며 CLI 종료 코드는
-`1`이 됩니다. 정상 분석은 `0`입니다.
+## 4. 공개 API
 
-## 처리 흐름
+### `analyze_project`
 
-Analyzer는 세 단계로 동작합니다.
+```python
+def analyze_project(
+    root: Path,
+    exclude_patterns: tuple[str, ...] | list[str] | None = None,
+    extractors: list[EndpointExtractor] | None = None,
+) -> AnalysisResult:
+    ...
+```
 
-1. **Pass 0 — 파일 수집과 파싱**
-   Python 파일을 한 번씩 읽어 AST로 변환합니다. 읽기 실패나 문법 오류가 있는
-   파일은 `PARSE_FAILED` 노트를 남기고 건너뜁니다.
-2. **Pass 1 — 프로젝트 인덱스 구축**
-   모듈, import, 클래스, 함수, 상수, 타입 별칭, 라우터 마운트, 예외 처리기를
-   색인합니다. 이후 단계는 파일을 다시 읽지 않습니다.
-3. **Pass 2 — 엔드포인트별 추출**
-   라우트마다 extractor를 의존 순서에 맞춰 실행해 `Endpoint`, `Constraint`,
-   `DependencyNode`, `ExceptionFlow`를 채웁니다.
+프로젝트 파일 수집, 인덱스 구축, 엔드포인트 추출을 한 번에 수행합니다.
 
-기본 extractor의 역할은 다음과 같습니다.
-
-| Extractor | 역할 |
+| 매개변수 | 설명 |
 | --- | --- |
-| `route` | 경로, 메서드, 상태 코드, 응답 모델, 태그 |
-| `dependency` | 네 선언 위치의 의존성과 전이 의존성 |
-| `params` | path/query/header/cookie/form 파라미터와 요청 모델 |
-| `body` | Pydantic 모델의 필드·상속·중첩 제약 |
-| `auth` | 401/403, scope, 이름 단서를 통한 인증·권한 판정 |
-| `exception` | handler, 서비스 호출, 의존성의 예외 흐름 |
-| `effects` | DB·HTTP 등 외부 호출과 시간·난수 등 비결정성 후보 |
+| `root` | 분석할 프로젝트의 루트 디렉터리 |
+| `exclude_patterns` | 루트 기준 제외 패턴 목록 |
+| `extractors` | 기본 extractor 대신 실행할 extractor 목록 |
 
-실행 순서는 목록 순서가 아니라 각 extractor의 `requires`로 결정됩니다.
+`exclude_patterns=None`이면 기본 제외 패턴을 사용합니다. 목록을 직접 전달하면
+기본 패턴에 추가되는 것이 아니라 기본 패턴 전체를 대체합니다.
 
-## 라우터와 의존성 처리
+기본 제외 대상은 다음과 같습니다.
 
-FastAPI의 실제 경로는 보통 여러 파일에 나뉩니다.
+- `.venv`, `venv`, `site-packages`
+- `node_modules`
+- `__pycache__`
+- `.git`
+- `tests`
+
+### `extract_features`
+
+```python
+def extract_features(
+    index: ProjectIndex,
+    extractors: list[EndpointExtractor] | None = None,
+) -> AnalysisResult:
+    ...
+```
+
+이미 구축된 `ProjectIndex`에서 엔드포인트 추출 단계만 실행합니다. 동일한
+프로젝트 인덱스를 재사용하거나 특정 extractor만 시험할 때 사용합니다.
+
+### 직렬화 함수
+
+```python
+from testweaver.analyzer.serialize import (
+    analysis_to_dict,
+    dumps,
+    write_analysis,
+)
+```
+
+| 함수 | 반환값 | 설명 |
+| --- | --- | --- |
+| `analysis_to_dict(result)` | `dict` | 공개 JSON 스키마로 변환 |
+| `dumps(result, indent=2)` | `str` | UTF-8 JSON 문자열 생성 |
+| `write_analysis(result, path)` | `Path` | 상위 디렉터리를 생성하고 JSON 저장 |
+
+## 5. 분석 처리 모델
+
+Analyzer는 파일을 한 번만 읽고 파싱한 뒤 세 단계로 처리합니다.
+
+### Pass 0: 파일 수집 및 파싱
+
+1. 프로젝트 루트 아래의 Python 파일을 탐색합니다.
+2. 제외 패턴을 적용합니다.
+3. 각 파일을 UTF-8로 읽고 AST로 변환합니다.
+4. 읽기 또는 파싱에 실패한 파일은 진단을 기록하고 건너뜁니다.
+
+### Pass 1: 프로젝트 인덱스 구축
+
+다음 정보를 프로젝트 전역 인덱스로 구성합니다.
+
+- 모듈 경로
+- import 및 별칭
+- 클래스와 최상위 함수
+- 모듈 상수와 클래스 인스턴스
+- 타입 별칭
+- FastAPI 앱, 라우터 및 마운트 관계
+- 전역 예외 처리기
+
+이 단계에서는 가능한 한 정보를 있는 그대로 수집합니다. Pydantic 모델 여부와
+같이 다른 심볼을 확인해야 하는 판정은 인덱스가 완성된 후 수행합니다.
+
+### Pass 2: 엔드포인트 추출
+
+각 라우트에 대해 extractor를 실행하여 `Endpoint`, `Constraint`,
+`DependencyNode`, `ExceptionFlow`를 구성합니다.
+
+| Extractor | 책임 |
+| --- | --- |
+| `route` | 경로, 메서드, 성공 상태 코드, 응답 모델, 태그 |
+| `dependency` | 직접 및 전이 의존성 |
+| `params` | path, query, header, cookie, form 파라미터 |
+| `body` | Pydantic 요청 모델과 필드 제약 |
+| `auth` | 인증 및 권한 요구 여부 |
+| `exception` | 직접·간접 예외 흐름 |
+| `effects` | 외부 호출 및 비결정적 동작 후보 |
+
+Extractor 실행 순서는 등록 순서가 아니라 각 extractor의 `requires` 선언을
+위상 정렬하여 결정합니다.
+
+## 6. 라우트 해석
+
+Analyzer는 다음 라우트 선언을 지원합니다.
+
+- `@app.get`, `@app.post`, `@app.put`, `@app.patch`, `@app.delete`
+- `@app.head`, `@app.options`
+- `@router.<method>`
+- `@router.api_route(..., methods=[...])`
+- 하나의 handler에 적용된 복수의 라우트 데코레이터
+- 중첩 `include_router`
+- 반복문을 이용한 정적 라우터 등록
+- 동일 라우터의 다중 마운트
+
+경로는 다음 요소를 순서대로 결합합니다.
+
+```text
+상위 라우터 또는 앱의 mount prefix
+  + 현재 라우터의 mount prefix
+  + APIRouter(prefix=...)
+  + 라우트 데코레이터의 path
+```
+
+예를 들어 다음 선언은 `GET /api/v1/orders/{order_id}`로 분석됩니다.
 
 ```python
 # main.py
@@ -181,117 +214,257 @@ router = APIRouter(prefix="/orders")
 def get_order(order_id: int): ...
 ```
 
-Analyzer는 이를 `GET /api/v1/orders/{order_id}`로 합칩니다. 중첩 라우터와
-동일 라우터의 다중 마운트도 처리합니다. 다중 마운트에서는 각 경로의
-의존성과 태그를 섞지 않고 별도로 유지합니다.
+동일한 라우터가 여러 위치에 마운트되면 경로별로 별도의 feature를 생성합니다.
+각 마운트의 의존성과 태그도 다른 경로와 섞이지 않도록 별도로 유지합니다.
 
-의존성은 다음 네 위치를 모두 수집합니다.
+## 7. 의존성 해석
 
-- `FastAPI(dependencies=[...])` — `app`
-- `APIRouter(dependencies=[...])` 및 `include_router(..., dependencies=[...])` — `router`
-- 라우트 데코레이터의 `dependencies=[...]` — `route`
-- handler 인자의 `Depends` 또는 `Security` — `handler`
+다음 네 위치의 `Depends` 및 `Security`를 수집합니다.
 
-의존성 이름은 선언된 원본 모듈 기준으로 해석합니다. 따라서 앱 설정 파일과
-라우트 파일에 동명 함수가 있어도 잘못 연결하지 않습니다.
-
-## 결과 읽는 법
-
-`features`의 원소 하나가 엔드포인트 하나입니다. 핵심 필드는 다음과 같습니다.
-
-| 필드 | 의미 |
+| 선언 위치 | `DependencyOrigin` |
 | --- | --- |
-| `feature_id` | `METHOD /path` 형태의 기능 식별자 |
-| `success_status_code` | 확정된 성공 상태 코드. 해석 실패 시 `null` |
-| `constraints` | 입력 위치와 필드별 제약 목록 |
-| `dependencies` | 원본 심볼, 선언 위치, scope, override 가능 여부 |
-| `exceptions` | 예외 타입, 상태 코드, 발생 함수, 호출 깊이 |
-| `requires_auth` | 인증 정보가 필요한지 여부 |
-| `requires_permission` | 역할·scope 등 권한 검사가 필요한지 여부 |
-| `calls_external` | 테스트에서 mock/fixture가 필요할 수 있는 호출 |
-| `nondeterministic` | 시간·UUID·난수처럼 결과 고정이 필요한 호출 |
-| `notes` | 해당 기능에서 정적으로 확정하지 못한 내용 |
+| handler 매개변수 | `handler` |
+| 라우트 데코레이터 | `route` |
+| `APIRouter` 또는 `include_router` | `router` |
+| `FastAPI` | `app` |
 
-`Constraint.location`은 값을 어디에 실어야 하는지 나타냅니다. body 필드는
-중첩 구조를 `address.zipcode` 같은 점 표기로 펼치며, 중첩 모델 자체에 대한
-제약도 함께 남깁니다.
+의존성이 다시 다른 의존성을 요구하면 제한된 깊이까지 재귀적으로 추적합니다.
+호출 가능한 클래스 인스턴스는 해당 클래스의 `__call__` 메서드를 확인합니다.
 
-## 분석 노트
+모든 의존성 심볼은 실제 선언 모듈 기준으로 해석됩니다. 이 규칙은 앱 설정
+모듈과 라우트 모듈에 동일한 이름의 함수가 존재할 때 잘못된 심볼이 선택되는
+것을 방지합니다.
 
-정적 분석 실패를 빈 값으로 숨기지 않고 `AnalysisNote`로 기록합니다.
+`Security(..., scopes=[...])`의 scope는 `DependencyNode.scopes`에 보존됩니다.
 
-- `ERROR`: 분석 요청 자체를 정상 완료하지 못한 상태입니다. 현재 대표 사례는
-  분석 루트가 존재하지 않는 경우입니다.
-- `WARNING`: 일부 파일·경로·상태 코드를 확정하지 못했지만 나머지 분석은
-  계속했습니다.
-- `INFO`: 결과는 만들었지만 수동 검토가 필요한 제한이 있습니다.
+## 8. 입력 제약 해석
 
-자주 보는 코드는 다음과 같습니다.
+### 매개변수 위치
 
-| 코드 | 의미와 대응 |
+명시적인 FastAPI marker가 있으면 해당 marker를 우선합니다.
+
+| Marker | 위치 |
 | --- | --- |
-| `PARSE_FAILED` | 파일 읽기 또는 Python 파싱 실패. 해당 파일을 직접 확인합니다. |
-| `UNRESOLVED_PATH` | 라우트 경로가 동적 값이라 확정되지 않았습니다. |
-| `UNRESOLVED_PREFIX` | router 또는 mount prefix를 상수로 풀지 못했습니다. |
-| `UNRESOLVED_STATUS` | 성공 또는 예외 상태 코드를 확정하지 못했습니다. |
-| `MODEL_NOT_FOUND` | 요청 모델 정의를 프로젝트에서 찾지 못했습니다. |
-| `DYNAMIC_ROUTE` | 런타임 등록 라우트 또는 해석 불가능한 mount가 있습니다. |
-| `CUSTOM_VALIDATOR` | validator 존재는 확인했지만 규칙을 제약으로 변환하지 못했습니다. |
-| `UNSUPPORTED_SYNTAX` | 여러 body 모델 등 현재 표현 범위를 벗어난 선언입니다. |
+| `Path` | `path` |
+| `Query` | `query` |
+| `Header` | `header` |
+| `Cookie` | `cookie` |
+| `Body` | `body` |
+| `Form`, `File` | `form` |
 
-`WARNING`과 `INFO`가 있다고 분석 전체가 실패한 것은 아닙니다. 다만 해당
-엔드포인트의 자동 생성 케이스는 노트와 함께 검토해야 합니다.
+Marker가 없으면 다음 규칙을 적용합니다.
 
-## 지원 범위와 알려진 한계
+1. URL 템플릿에 포함된 이름은 path로 분류합니다.
+2. `UploadFile`은 form으로 분류합니다.
+3. 프로젝트 내부 Pydantic 모델은 body로 분류합니다.
+4. collection 타입은 body로 분류합니다.
+5. 나머지 scalar 타입은 query로 분류합니다.
 
-현재 구현은 일반적인 FastAPI 선언을 안정적으로 다루지만, Python 실행 결과를
-완전히 대신하지는 않습니다.
+### 지원 제약
 
-- 리터럴과 색인 가능한 모듈 상수는 해석하지만 함수 반환값, 환경 변수,
-  복잡한 계산으로 만든 경로·prefix는 실행하지 않습니다.
-- `add_api_route`처럼 런타임에 등록하는 라우트는 누락 가능성을 노트로 남깁니다.
-- 호출 그래프와 전이 의존성은 깊이 제한이 있습니다. 매우 깊거나 동적인 호출은
-  결과에 포함되지 않을 수 있습니다.
-- 호출 그래프는 프로젝트의 최상위 함수를 중심으로 따라갑니다. 실행 중 생성해
-  호출하는 중첩 함수나 동적 callable은 완전히 추적하지 않습니다.
-- 커스텀 Pydantic validator의 임의 Python 로직은 `CUSTOM_VALIDATOR`로 표시하며
-  자동으로 경계값 제약으로 변환하지 않습니다.
-- 여러 body 모델을 한 handler에서 받으면 첫 모델을 대표 모델로 사용하고
-  `UNSUPPORTED_SYNTAX` 노트를 남깁니다.
-- 외부 호출과 인증 판정 일부는 이름·타입 휴리스틱을 사용하므로 프로젝트별
-  명명 규칙에 따라 수동 확인이 필요할 수 있습니다.
+`Field`, `Path`, `Query`, `Header`, `Cookie`, `Body`, `Form`에서 다음 정보를
+추출합니다.
+
+- `min_length`, `max_length`
+- `ge`, `le`, `gt`, `lt`
+- `multiple_of`
+- `pattern` 및 `regex`
+- 기본값과 `default_factory`
+- alias와 `validation_alias`
+- `Literal` 및 enum 허용값
+- nullable 여부
+- 필수 여부
+
+Pydantic 필드의 필수 여부는 타입의 optional 여부가 아니라 기본값 존재 여부로
+판정합니다. 상속 모델과 중첩 모델을 추적하며, 중첩 필드는
+`address.zipcode` 형식으로 표현합니다.
+
+## 9. 인증 및 예외 해석
+
+### 인증과 권한
+
+의존성 함수가 직접 발생시키는 상태 코드와 다음 보조 정보를 사용합니다.
+
+- `401`: 인증 요구
+- `403`: 권한 요구
+- `Security` scope: 권한 요구
+- 인증·권한과 관련된 일반적인 심볼 이름
+
+이름 기반 판정은 함수 본문을 확인할 수 없는 경우를 보완하는 휴리스틱입니다.
+
+### 예외 흐름
+
+다음 위치에서 발생 가능한 예외를 수집합니다.
+
+- 라우트 handler 본문
+- 프로젝트 내부의 호출 대상 함수
+- endpoint에 적용된 의존성
+- 호출 가능한 의존성 객체의 `__call__`
+
+`HTTPException`과 `StarletteHTTPException`은 상태 코드와 문자열 detail을
+추출합니다. 커스텀 예외는 등록된 전역 예외 처리기에서 상태 코드를 찾습니다.
+
+실행되지 않는 중첩 함수 또는 클래스의 본문은 바깥 함수의 예외·효과로 계산하지
+않습니다.
+
+## 10. 출력 모델
+
+### `AnalysisResult`
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `features` | `list[Feature]` | 분석된 엔드포인트 목록 |
+| `notes` | `list[AnalysisNote]` | 전역 및 feature 진단 목록 |
+| `root` | `Path \| None` | 경로 상대화 기준 |
+
+### `Feature`
+
+| 필드 | 설명 |
+| --- | --- |
+| `id` | `METHOD /path` 형식의 식별자 |
+| `name` | handler 함수 이름 |
+| `endpoint` | 엔드포인트 정보 |
+| `constraints` | 입력 제약 목록 |
+| `notes` | 해당 feature의 진단 목록 |
+
+### JSON feature 스키마
+
+```json
+{
+  "feature_name": "get_order",
+  "endpoint": "/api/v1/orders/{order_id}",
+  "method": "GET",
+  "feature_id": "GET /api/v1/orders/{order_id}",
+  "success_status_code": 200,
+  "requires_auth": true,
+  "requires_permission": false,
+  "request_model": null,
+  "response_model": "schemas.OrderOut",
+  "constraints": [],
+  "exceptions": [],
+  "dependencies": [],
+  "source_file": "routes/orders.py",
+  "module_path": "routes.orders",
+  "is_async": true,
+  "tags": ["orders"],
+  "deprecated": false,
+  "calls_external": [],
+  "nondeterministic": [],
+  "notes": []
+}
+```
+
+`source_file`과 진단의 파일 경로는 가능하면 분석 루트 기준 POSIX 상대 경로로
+직렬화됩니다.
+
+### `Constraint`
+
+모든 constraint에는 다음 필드가 포함됩니다.
+
+- `field_name`
+- `location`
+- `type_name`
+- `required`
+- `nullable`
+
+값이 존재할 때만 길이·범위·패턴·허용값·기본값·중첩 모델 정보가 추가됩니다.
+
+### `DependencyNode`
+
+의존성의 원본 심볼, 선언 위치, 인증·권한 판정, scope 및 override 가능 여부를
+제공합니다.
+
+### `ExceptionFlow`
+
+예외 타입, 상태 코드, 오류 코드, 발생 함수, 호출 깊이 및 상태 코드 해석 여부를
+제공합니다. `resolved=false`이면 `status_code`를 확정하지 못한 상태입니다.
+
+## 11. 진단
+
+정적으로 해석하지 못한 항목은 `AnalysisNote`로 보고합니다.
+
+### 진단 수준
+
+| 수준 | 의미 |
+| --- | --- |
+| `error` | 분석 요청 자체를 정상적으로 완료할 수 없음 |
+| `warning` | 일부 정보를 확정하지 못했지만 나머지 분석은 계속됨 |
+| `info` | 결과를 생성했으나 수동 검토가 필요한 제한이 있음 |
+
+CLI는 하나 이상의 `error` 진단이 있으면 종료 코드 `1`, 그렇지 않으면 `0`을
+반환합니다.
+
+### 진단 코드
+
+| 코드 | 설명 |
+| --- | --- |
+| `PARSE_FAILED` | 파일 읽기, Python 파싱 또는 분석 루트 확인 실패 |
+| `UNRESOLVED_PATH` | 라우트 경로를 문자열로 확정할 수 없음 |
+| `UNRESOLVED_PREFIX` | 라우터 또는 mount prefix를 확정할 수 없음 |
+| `UNRESOLVED_STATUS` | 성공 또는 예외 상태 코드를 확정할 수 없음 |
+| `MODEL_NOT_FOUND` | 프로젝트에서 모델 정의를 찾을 수 없음 |
+| `AMBIGUOUS_MODEL` | 동일 이름의 후보가 여러 개라 심볼을 특정할 수 없음 |
+| `EXTERNAL_SYMBOL` | 프로젝트 외부 심볼이라 override 대상을 확정할 수 없음 |
+| `DYNAMIC_ROUTE` | 런타임 라우트 등록 또는 동적 mount를 해석할 수 없음 |
+| `MULTI_MOUNT` | 순환 라우터 마운트를 발견함 |
+| `CUSTOM_VALIDATOR` | validator 로직을 선언형 제약으로 변환할 수 없음 |
+| `UNSUPPORTED_SYNTAX` | 현재 출력 모델로 완전히 표현할 수 없는 선언 |
+
+진단이 있는 결과를 소비할 때는 빈 값만 검사하지 말고 `code`, `resolved`,
+`overridable`을 함께 확인해야 합니다.
+
+## 12. 설계 보장
+
+### 비실행 분석
+
+프로덕션 분석 경로는 대상 프로젝트를 import하거나 실행하지 않습니다. OpenAPI
+parity 테스트만 비교 목적으로 fixture 애플리케이션을 실행합니다.
+
+### 결정적 결과
+
+파일과 feature는 정렬된 순서로 처리됩니다. 동일한 입력과 설정은 동일한 분석
+순서와 직렬화 결과를 생성해야 합니다.
+
+### 심볼 출처 보존
+
+프로젝트 내부 참조는 단순 이름이 아니라 모듈과 이름을 포함한 `SymbolRef`로
+표현합니다. 내부 라우터 그래프도 의존성의 선언 모듈을 보존합니다.
+
+### 불확실성 공개
+
+해석 실패를 임의 기본값으로 대체하지 않습니다. 불확실한 값은 `None` 또는
+부분 결과로 표현하고 대응하는 `AnalysisNote`를 제공합니다.
+
+### 공개 출력 호환성
+
+Analyzer의 하류 계약은 `models.py`의 공개 자료구조와 `serialize.py`의 JSON
+형식입니다. `DependencySite`와 `RouteVariant`는 라우터 분석을 위한 내부 타입이며
+직렬화 스키마에 노출되지 않습니다.
+
+## 13. 제한 사항
+
+정적 분석 특성상 다음 표현은 완전하게 해석되지 않을 수 있습니다.
+
+- 함수 반환값, 환경 변수 또는 복잡한 계산으로 생성한 path와 prefix
+- `add_api_route`를 포함한 런타임 라우트 등록
+- 매우 깊거나 동적으로 결정되는 함수 호출 및 전이 의존성
+- 실행 중 정의하고 호출하는 중첩 함수
+- 임의 Python 코드로 작성된 Pydantic validator
+- 한 handler에서 사용하는 복수의 독립 body 모델
+- 동적으로 생성된 callable과 descriptor
+
+추가 제한은 다음과 같습니다.
+
+- 인증 및 외부 호출 판정 일부는 심볼 이름과 타입 휴리스틱을 사용합니다.
 - 동일한 HTTP 메서드와 경로를 중복 등록하면 `feature_id`도 중복될 수 있습니다.
-  FastAPI 라우트 선언 자체의 중복 여부를 먼저 정리하는 것이 안전합니다.
-- 기본 제외 패턴에는 `tests`, 가상환경, `site-packages`, `.git` 등이 포함됩니다.
-  `exclude_patterns`를 직접 넘기면 기본 목록에 추가되는 것이 아니라 **기본 목록을
-  대체**합니다.
+- 본문 모델 중첩, 상속 및 호출 그래프에는 무한 순환 방지를 위한 깊이 제한이
+  적용됩니다.
 
-이 한계 때문에 생성 단계에서는 `notes`, `resolved`, `overridable` 값을 무시하지
-않아야 합니다.
+해석할 수 없는 항목은 가능한 경우 진단으로 보고합니다.
 
-## 검증 방법
+## 14. 사용자 정의 Extractor
 
-전체 회귀 테스트:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp=.test-tmp
-```
-
-코드 검사와 컴파일 확인:
-
-```powershell
-.\.venv\Scripts\python.exe -m ruff check src tests
-.\.venv\Scripts\python.exe -m compileall -q src tests
-```
-
-현재 회귀 테스트에는 다중 앱, 직접 앱 라우트, 중첩·다중 마운트, 모듈 간
-의존성, 전이 타입 별칭, 반복 중첩 모델, 실행되지 않는 중첩 함수 오판 등이
-포함됩니다.
-
-## 새 extractor 추가
-
-`EndpointExtractor` 규약에 맞춰 `name`, `requires`, `extract(context)`를
-구현하고 `DEFAULT_EXTRACTORS`에 인스턴스를 추가합니다.
+사용자 정의 extractor는 `EndpointExtractor` 프로토콜을 구현해야 합니다.
 
 ```python
 class ExampleExtractor:
@@ -299,9 +472,52 @@ class ExampleExtractor:
     requires = ("route",)
 
     def extract(self, context):
-        ...
+        context.endpoint.calls_external.append("example.call")
 ```
 
-`requires`에 적힌 이름을 바탕으로 위상 정렬되므로 목록에서 수동으로 실행
-순서를 맞출 필요는 없습니다. 순환 의존성을 만들면 `TopologicalSorter`가
-오류를 발생시키므로 반드시 extractor 순서 테스트도 함께 추가합니다.
+`name`은 extractor 목록 안에서 고유해야 합니다. `requires`에는 먼저 실행되어야
+하는 extractor 이름을 지정합니다. 목록에 존재하지 않는 의존성 이름은 선택 실행을
+지원하기 위해 무시됩니다. 순환 의존성은 `TopologicalSorter` 오류를 발생시킵니다.
+
+```python
+from pathlib import Path
+
+from testweaver.analyzer.extractors import RouteExtractor
+from testweaver.analyzer.pipeline import analyze_project
+
+result = analyze_project(
+    Path("path/to/project"),
+    extractors=[RouteExtractor(), ExampleExtractor()],
+)
+```
+
+## 15. 검증
+
+전체 테스트를 실행합니다.
+
+```powershell
+uv run pytest -q
+```
+
+샌드박스 또는 제한된 임시 디렉터리 환경에서는 프로젝트 내부 경로를 지정합니다.
+
+```powershell
+uv run pytest -q -p no:cacheprovider --basetemp=.test-tmp
+```
+
+정적 검사와 컴파일 검사를 실행합니다.
+
+```powershell
+uv run ruff check src tests
+uv run python -m compileall -q src tests
+```
+
+회귀 테스트는 다음 범주를 포함합니다.
+
+- OpenAPI 경로·파라미터·상태 코드 parity
+- 다중 앱 및 직접 앱 라우트
+- 중첩·반복·다중 라우터 마운트
+- 모듈 간 심볼 및 의존성 해석
+- Pydantic 상속·중첩·별칭·validator
+- 직접·간접 예외 흐름
+- 실행되지 않는 중첩 본문의 오판 방지
