@@ -64,7 +64,7 @@ class AuthExtractor:
         이름 휴리스틱보다 확실한 근거다. 프로젝트 밖 심볼은 본문을 볼 수
         없으므로 빈 집합이 되고, 그때는 이름 규칙으로만 판정한다.
         """
-        target = context.index.find_function(ref)
+        target = context.index.find_callable(ref)
         if target is None:
             return set()
 

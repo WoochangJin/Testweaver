@@ -126,7 +126,7 @@ class DependencyExtractor:
         `require_admin` 이 `get_current_user` 에 의존하면 그 401 도 이
         엔드포인트에서 날 수 있다. 예외 수집이 이 목록을 쓴다.
         """
-        target = context.index.find_function(ref)
+        target = context.index.find_callable(ref)
         if target is None:
             return
         for arg, default in iter_all_args(target.node):

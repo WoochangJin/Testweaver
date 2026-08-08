@@ -16,6 +16,7 @@ import re
 from testweaver.analyzer.ast_utils import (
     UNRESOLVED,
     iter_all_args,
+    keyword_of,
     literal_value,
     unwrap_annotation,
 )
@@ -95,7 +96,13 @@ class ParamExtractor:
             claimed.add(arg.arg)
             context.constraints.append(
                 self._constraint(
-                    context, arg.arg, info, marker, default, location, origin_file
+                    context,
+                    wire_name(arg.arg, marker, location),
+                    info,
+                    marker,
+                    default,
+                    location,
+                    origin_file,
                 )
             )
 
@@ -109,7 +116,8 @@ class ParamExtractor:
         핸들러 시그니처에는 그 이름이 전혀 나타나지 않는다.
         """
         for dependency in context.endpoint.dependencies:
-            target = context.index.find_function(dependency.source)
+            # 함수가 아니라 호출 가능한 클래스 인스턴스일 수도 있다.
+            target = context.index.find_callable(dependency.source)
             if target is None:
                 continue
             self._read_signature(
@@ -200,6 +208,36 @@ class ParamExtractor:
                 context.index.resolve(origin_file, info.model_name)
             )
         return None
+
+
+def wire_name(arg_name: str, marker: ast.Call | None, location: ParamLocation) -> str:
+    """요청에 실제로 실려 나가는 이름.
+
+    파이썬 인자 이름과 전송 이름은 다를 수 있다.
+
+        x_api_key: Annotated[str, Header()]        →  "x-api-key"
+        q: Annotated[str, Query(alias="search")]   →  "search"
+
+    헤더는 밑줄을 하이픈으로 바꾸는 게 FastAPI 기본값이다(`convert_underscores`).
+    인자 이름을 그대로 쓰면 생성된 테스트가 엉뚱한 헤더를 보내 인증에 실패한다.
+    """
+    alias = (
+        literal_value(keyword_of(marker, "alias")) if marker is not None else UNRESOLVED
+    )
+    if isinstance(alias, str):
+        return alias
+
+    if location is not ParamLocation.HEADER:
+        return arg_name
+
+    convert = (
+        literal_value(keyword_of(marker, "convert_underscores"))
+        if marker
+        else UNRESOLVED
+    )
+    if convert is False:
+        return arg_name
+    return arg_name.replace("_", "-")
 
 
 def _resolve_default(marker: ast.Call | None, default: ast.expr | None) -> DefaultInfo:

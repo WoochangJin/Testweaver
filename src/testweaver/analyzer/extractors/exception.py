@@ -53,7 +53,7 @@ class ExceptionExtractor:
 
         # 의존성이 던지는 예외도 이 엔드포인트에서 난다.
         for dependency in context.endpoint.dependencies:
-            target = context.index.find_function(dependency.source)
+            target = context.index.find_callable(dependency.source)
             if target is None:
                 continue
             self._walk(
