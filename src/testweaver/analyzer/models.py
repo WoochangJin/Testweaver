@@ -87,12 +87,18 @@ class SymbolRef:
     """코드 상의 심볼 하나에 대한 참조.
 
     `module` 이 None 이면 아직 해석되지 않았거나 프로젝트 밖의 심볼이다.
-    frozen 인 이유는 방문 여부를 추적하는 set 의 원소로 쓰이기 때문이다.
+    frozen 인 이유는 인덱스의 딕셔너리 키와 순회 방문 집합의 원소로 쓰이기
+    때문이다.
+
+    심볼의 정체성은 `(module, name)` 뿐이다. `file` 은 편의를 위한 부가
+    정보라 비교에서 제외한다. 그러지 않으면 같은 심볼이라도 import 표에서
+    온 것(file 없음)과 정의부에서 만든 것(file 있음)이 서로 다른 키가 되어
+    조회가 조용히 실패한다.
     """
 
     name: str
     module: str | None = None
-    file: Path | None = None
+    file: Path | None = field(default=None, compare=False)
 
     @property
     def is_resolved(self) -> bool:
