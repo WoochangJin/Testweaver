@@ -102,6 +102,16 @@ def test_dependency_arguments_are_not_treated_as_parameters(features):
     assert "user" not in names, "Annotated[..., Depends()] 는 입력이 아니다"
 
 
+def test_parameters_declared_inside_dependencies_are_hoisted(features):
+    """FastAPI 는 의존성의 Header/Query 인자를 엔드포인트 스펙으로 올린다.
+
+    get_current_user 가 받는 Authorization 헤더는 핸들러 시그니처 어디에도
+    나타나지 않지만, 이 엔드포인트를 호출하려면 반드시 필요하다.
+    """
+    header = constraint(features["GET /api/v1/auth/me"], "authorization")
+    assert header.location is ParamLocation.HEADER
+
+
 # ─────────────────── body ───────────────────
 
 

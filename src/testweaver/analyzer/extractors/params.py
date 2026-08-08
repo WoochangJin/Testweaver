@@ -53,13 +53,27 @@ class ParamExtractor:
     """FastAPI 의 파라미터 판정 규칙을 그대로 따라간다. 순서가 곧 규칙이다."""
 
     name = "params"
-    requires = ("route",)
+    requires = ("route", "dependency")
 
     def extract(self, context: ExtractionContext) -> None:
         path_names = set(_PATH_TEMPLATE.findall(context.endpoint.path))
+        claimed: set[str] = set()
 
-        for arg, default in iter_all_args(context.handler):
-            if arg.arg in {"self", "cls"}:
+        self._read_signature(
+            context, context.handler, context.module.path, path_names, claimed
+        )
+        self._read_dependency_signatures(context, path_names, claimed)
+
+    def _read_signature(
+        self,
+        context: ExtractionContext,
+        function,
+        origin_file,
+        path_names: set[str],
+        claimed: set[str],
+    ) -> None:
+        for arg, default in iter_all_args(function):
+            if arg.arg in {"self", "cls"} or arg.arg in claimed:
                 continue
 
             info = unwrap_annotation(arg.annotation)
@@ -72,12 +86,34 @@ class ParamExtractor:
                 continue
 
             marker = find_marker(default, info.metadata, PARAM_MARKERS)
-            location = self._location(context, arg.arg, info, marker, path_names)
+            location = self._location(
+                context, arg.arg, info, marker, path_names, origin_file
+            )
             if location is None:
                 continue  # 본문 모델. request_model 로 이미 지목했다.
 
+            claimed.add(arg.arg)
             context.constraints.append(
-                self._constraint(context, arg.arg, info, marker, default, location)
+                self._constraint(
+                    context, arg.arg, info, marker, default, location, origin_file
+                )
+            )
+
+    def _read_dependency_signatures(
+        self, context: ExtractionContext, path_names: set[str], claimed: set[str]
+    ) -> None:
+        """의존성 함수가 선언한 파라미터도 이 엔드포인트의 입력이다.
+
+        FastAPI 는 의존성의 Header/Query/Cookie 인자를 엔드포인트 스펙으로
+        끌어올린다. 인증 의존성이 `Authorization` 헤더를 받는 경우가 대표적인데,
+        핸들러 시그니처에는 그 이름이 전혀 나타나지 않는다.
+        """
+        for dependency in context.endpoint.dependencies:
+            target = context.index.find_function(dependency.source)
+            if target is None:
+                continue
+            self._read_signature(
+                context, target.node, target.module.path, path_names, claimed
             )
 
     # ─────────────── 위치 판정 ───────────────
@@ -89,6 +125,7 @@ class ParamExtractor:
         info,
         marker: ast.Call | None,
         path_names: set[str],
+        origin_file,
     ) -> ParamLocation | None:
         """FastAPI 가 파라미터 위치를 정하는 순서를 그대로 따른다."""
         if marker is not None:
@@ -101,7 +138,11 @@ class ParamExtractor:
             return ParamLocation.FORM
 
         # 프로젝트가 정의한 Pydantic 모델이면 요청 본문이다.
-        model = context.resolve(info.model_name) if info.model_name else None
+        model = (
+            context.index.resolve(origin_file, info.model_name)
+            if info.model_name
+            else None
+        )
         if model is not None and context.index.is_pydantic_model(model):
             self._claim_body(context, model)
             return None
@@ -130,10 +171,11 @@ class ParamExtractor:
         marker: ast.Call | None,
         default: ast.expr | None,
         location: ParamLocation,
+        origin_file,
     ) -> Constraint:
         declared = _resolve_default(marker, default)
         required = location is ParamLocation.PATH or not declared.has_default
-        constraint = Constraint(
+        return Constraint(
             field_name=name,
             type_name=_type_name(info),
             required=required,
@@ -141,16 +183,22 @@ class ParamExtractor:
             nullable=info.is_optional,
             default=declared.value,
             default_factory=declared.factory,
-            allowed_values=self._allowed_values(context, info),
+            allowed_values=self._allowed_values(context, info, origin_file),
             **field_constraints(marker),
         )
-        return constraint
 
-    def _allowed_values(self, context: ExtractionContext, info):
+    def _allowed_values(self, context: ExtractionContext, info, origin_file):
+        """타입은 그 인자를 선언한 모듈 기준으로 해석한다.
+
+        의존성 함수의 인자는 핸들러와 다른 파일에 있으므로, 핸들러 기준으로
+        찾으면 모듈이 틀린다.
+        """
         if info.literal_values:
             return list(info.literal_values)
         if info.model_name:
-            return context.index.enum_values(context.resolve(info.model_name))
+            return context.index.enum_values(
+                context.index.resolve(origin_file, info.model_name)
+            )
         return None
 
 
