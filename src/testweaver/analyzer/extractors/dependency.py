@@ -52,9 +52,15 @@ class DependencyExtractor:
         seen: set[SymbolRef] = set()
 
         # 라우터와 앱에서 물려받은 것 (router_graph 가 이미 합쳐 뒀다).
-        inherited = context.router.effective_dependencies if context.router else []
-        for item in inherited:
-            self._add(context, item, DependencyOrigin.ROUTER, collected, seen)
+        for site in context.inherited_dependencies:
+            self._add(
+                context,
+                site.node,
+                site.origin,
+                collected,
+                seen,
+                origin_file=site.module.path,
+            )
 
         # 라우트 데코레이터에 붙은 것.
         for item in _list_items(keyword_of(context.decorator, "dependencies")):
@@ -80,11 +86,12 @@ class DependencyExtractor:
         seen: set[SymbolRef],
         arg_name: str | None = None,
         depth: int = 0,
+        origin_file=None,
     ) -> None:
         if not isinstance(marker, ast.Call):
             return
         target = argument_of(marker, 0, "dependency")
-        ref = context.resolve_expr(target)
+        ref = context.index.resolve_expr(origin_file or context.module.path, target)
         if ref is None or ref in seen:
             return
         seen.add(ref)
@@ -129,7 +136,7 @@ class DependencyExtractor:
         if target is None:
             return
         for arg, default in iter_all_args(target.node):
-            info = context.index.annotation(context.module.path, arg.annotation)
+            info = context.index.annotation(target.module.path, arg.annotation)
             marker = find_marker(default, info.metadata, DEPENDENCY_MARKERS)
             if marker is None:
                 continue
@@ -144,6 +151,7 @@ class DependencyExtractor:
                     name=arg.arg,
                     source=nested,
                     origin=origin,
+                    scopes=_scopes(marker),
                     overridable=context.index.is_in_project(nested),
                 )
             )
