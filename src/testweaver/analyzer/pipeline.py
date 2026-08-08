@@ -47,6 +47,8 @@ def extract_features(
                 method=site.method,
                 router=site.router,
                 prefix=site.prefix,
+                inherited_dependencies=site.inherited_dependencies,
+                inherited_tags=site.inherited_tags,
                 endpoint=Endpoint(
                     path="", method=site.method, handler_name=site.handler.name
                 ),

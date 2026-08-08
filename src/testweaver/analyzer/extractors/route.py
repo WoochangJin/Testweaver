@@ -10,7 +10,7 @@ from __future__ import annotations
 import ast
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from testweaver.analyzer.ast_utils import (
     all_decorator_calls,
@@ -23,7 +23,11 @@ from testweaver.analyzer.ast_utils import (
 from testweaver.analyzer.extractors.base import ExtractionContext
 from testweaver.analyzer.index.context import ProjectIndex
 from testweaver.analyzer.index.file_index import ModuleInfo
-from testweaver.analyzer.index.router_graph import RouterDef
+from testweaver.analyzer.index.router_graph import (
+    DependencySite,
+    RouterDef,
+    RouteVariant,
+)
 from testweaver.analyzer.models import (
     AnalysisNote,
     HttpMethod,
@@ -56,6 +60,8 @@ class RouteSite:
     #: 이 라우트에 적용할 prefix. 라우터가 여러 곳에 마운트되면 사이트도
     #: 그만큼 생긴다. FastAPI 가 실제로 라우트를 여러 벌 만들기 때문이다.
     prefix: str = ""
+    inherited_dependencies: list[DependencySite] = field(default_factory=list)
+    inherited_tags: list[str] = field(default_factory=list)
 
 
 def find_routes(
@@ -83,20 +89,51 @@ def _routes_of(
         receiver, attribute = split_attribute_call(decorator)
         if attribute is None:
             continue
-        router = index.router_for(module.path, receiver) if receiver else None
+        owner = index.resolve(module.path, receiver) if receiver else None
+        router = index.routers.routers.get(owner) if owner else None
+        app_dependencies = (
+            index.routers.app_dependencies.get(owner, []) if owner else []
+        )
 
-        prefixes = router.full_prefixes if router else []
+        # `.get()` 같은 메서드 이름만 보고 일반 데코레이터를 라우트로
+        # 오인하지 않는다. 선언부에서 확인된 APIRouter/FastAPI 만 받는다.
+        if router is None and owner not in index.routers.app_refs:
+            continue
+
+        variants = (
+            router.route_variants
+            if router
+            else [RouteVariant("", app_dependencies, [])]
+        )
 
         method = _METHOD_DECORATORS.get(attribute)
         if method is not None:
-            for prefix in prefixes or [""]:
-                yield RouteSite(module, handler, decorator, method, router, prefix)
+            for variant in variants:
+                yield RouteSite(
+                    module,
+                    handler,
+                    decorator,
+                    method,
+                    router,
+                    variant.prefix,
+                    variant.dependencies,
+                    variant.tags,
+                )
             continue
 
         if attribute == _GENERIC_DECORATOR:
             for name in _declared_methods(decorator):
-                for prefix in prefixes or [""]:
-                    yield RouteSite(module, handler, decorator, name, router, prefix)
+                for variant in variants:
+                    yield RouteSite(
+                        module,
+                        handler,
+                        decorator,
+                        name,
+                        router,
+                        variant.prefix,
+                        variant.dependencies,
+                        variant.tags,
+                    )
 
 
 def _declared_methods(decorator: ast.Call) -> list[HttpMethod]:
@@ -197,7 +234,7 @@ class RouteExtractor:
         return context.resolve(info.model_name) if info.model_name else None
 
     def _tags(self, context: ExtractionContext) -> list[str]:
-        inherited = context.router.effective_tags if context.router else []
+        inherited = context.inherited_tags
         declared = literal_value(keyword_of(context.decorator, "tags"))
         own = (
             [tag for tag in declared if isinstance(tag, str)]

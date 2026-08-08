@@ -31,10 +31,34 @@ from testweaver.analyzer.ast_utils import (
 from testweaver.analyzer.index.constants import resolve_value
 from testweaver.analyzer.index.file_index import ModuleInfo
 from testweaver.analyzer.index.import_map import ImportMap
-from testweaver.analyzer.models import AnalysisNote, NoteCode, NoteLevel, SymbolRef
+from testweaver.analyzer.models import (
+    AnalysisNote,
+    DependencyOrigin,
+    NoteCode,
+    NoteLevel,
+    SymbolRef,
+)
 
 _ROUTER_FACTORY = "APIRouter"
 _APP_FACTORY = "FastAPI"
+
+
+@dataclass(slots=True)
+class DependencySite:
+    """의존성 선언과 이름 해석에 필요한 원본 모듈."""
+
+    node: ast.expr
+    origin: DependencyOrigin
+    module: ModuleInfo
+
+
+@dataclass(slots=True)
+class RouteVariant:
+    """라우터가 한 번 마운트되어 만들어지는 경로와 상속 설정 한 벌."""
+
+    prefix: str
+    dependencies: list[DependencySite] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -50,8 +74,9 @@ class RouterDef:
     #: 마운트 사슬을 모두 반영한 결과. `resolve_prefixes()` 가 채운다.
     #: 같은 라우터를 여러 곳에 마운트하면 FastAPI 는 라우트를 그만큼 만든다.
     full_prefixes: list[str] = field(default_factory=list)
-    inherited_dependencies: list[ast.expr] = field(default_factory=list)
+    inherited_dependency_items: list[DependencySite] = field(default_factory=list)
     inherited_tags: list[str] = field(default_factory=list)
+    route_variants: list[RouteVariant] = field(default_factory=list)
     is_mounted: bool = False
 
     @property
@@ -62,7 +87,18 @@ class RouterDef:
     @property
     def effective_dependencies(self) -> list[ast.expr]:
         """이 라우터의 라우트에 실제로 적용되는 의존성 전부."""
-        return [*self.inherited_dependencies, *self.own_dependencies]
+        return [site.node for site in self.effective_dependency_items]
+
+    @property
+    def effective_dependency_items(self) -> list[DependencySite]:
+        """의존성 선언과 그 선언 위치를 함께 반환한다."""
+        return [
+            *self.inherited_dependency_items,
+            *(
+                DependencySite(node, DependencyOrigin.ROUTER, self.module)
+                for node in self.own_dependencies
+            ),
+        ]
 
     @property
     def effective_tags(self) -> list[str]:
@@ -75,6 +111,7 @@ class MountEdge:
 
     parent: SymbolRef | None
     child: SymbolRef
+    app: SymbolRef | None = None
     prefix: str = ""
     dependencies: list[ast.expr] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
@@ -87,7 +124,9 @@ class RouterGraph:
     routers: dict[SymbolRef, RouterDef] = field(default_factory=dict)
     mounts: list[MountEdge] = field(default_factory=list)
     app_refs: set[SymbolRef] = field(default_factory=set)
-    app_dependencies: list[ast.expr] = field(default_factory=list)
+    app_dependencies: dict[SymbolRef, list[DependencySite]] = field(
+        default_factory=dict
+    )
 
     def get(self, module_path: str, var_name: str) -> RouterDef | None:
         return self.routers.get(SymbolRef(name=var_name, module=module_path))
@@ -137,7 +176,10 @@ def _collect_definitions(
             )
         elif factory == _APP_FACTORY:
             graph.app_refs.add(ref)
-            graph.app_dependencies.extend(_dependency_items(call))
+            graph.app_dependencies[ref] = [
+                DependencySite(node, DependencyOrigin.APP, module)
+                for node in _dependency_items(call)
+            ]
 
 
 def _collect_mounts(
@@ -187,18 +229,31 @@ def _record_mount(
     constants: dict[str, object],
     notes: list[AnalysisNote] | None,
 ) -> None:
-    parent_ref = (
-        SymbolRef(name=receiver, module=module.module_path, file=module.path)
-        if receiver
-        else None
-    )
-    # 대상이 라우터가 아니면 앱으로 본다 (app.include_router).
+    parent_ref = None
+    if receiver:
+        parent_ref = imports.resolve(receiver) or SymbolRef(
+            name=receiver, module=module.module_path, file=module.path
+        )
+    # 수신자가 실제 라우터/앱인지 확인한다. 이름이 우연히 include_router 인
+    # 일반 객체를 앱으로 오인하면 존재하지 않는 마운트가 만들어진다.
     parent = parent_ref if parent_ref in graph.routers else None
+    app = parent_ref if parent_ref in graph.app_refs else None
+    if parent is None and app is None:
+        _note(
+            notes,
+            NoteLevel.WARNING,
+            NoteCode.DYNAMIC_ROUTE,
+            "include_router 호출의 수신자를 라우터나 앱으로 해석하지 못했습니다",
+            module,
+            node.lineno,
+        )
+        return
 
     graph.mounts.append(
         MountEdge(
             parent=parent,
             child=child,
+            app=app,
             prefix=_declared_prefix(node, module, imports, constants, notes),
             dependencies=_dependency_items(node),
             tags=_tag_items(node),
@@ -274,18 +329,21 @@ def _resolve(
             router.module,
         )
         router.full_prefixes = [router.own_prefix]
+        router.route_variants = [_own_variant(router, router.own_prefix)]
         return router
 
     edges = edges_by_child.get(ref, [])
     if not edges:
         # 어디에도 마운트되지 않은 라우터. 자기 prefix 만 쓴다.
         router.full_prefixes = [router.own_prefix]
+        router.route_variants = [_own_variant(router, router.own_prefix)]
         return router
 
     visiting.add(ref)
     prefixes: list[str] = []
-    inherited_dependencies: list[ast.expr] = []
+    inherited_dependencies: list[DependencySite] = []
     inherited_tags: list[str] = []
+    variants: list[RouteVariant] = []
 
     for edge in edges:
         parent = (
@@ -293,24 +351,74 @@ def _resolve(
             if edge.parent is not None
             else None
         )
-        # 부모가 여러 곳에 마운트됐으면 그만큼 경로가 늘어난다.
-        parent_prefixes = parent.full_prefixes if parent else [""]
-        for parent_prefix in parent_prefixes or [""]:
-            joined = _join_prefix(parent_prefix, edge.prefix, router.own_prefix)
+        if parent:
+            parent_variants = parent.route_variants
+        else:
+            parent_variants = [
+                RouteVariant(
+                    prefix="",
+                    dependencies=list(graph.app_dependencies.get(edge.app, [])),
+                )
+            ]
+
+        # 부모가 여러 곳에 마운트됐으면 설정을 섞지 않고 경로별로 이어받는다.
+        for parent_variant in parent_variants or [RouteVariant(prefix="")]:
+            joined = _join_prefix(parent_variant.prefix, edge.prefix, router.own_prefix)
             if joined not in prefixes:
                 prefixes.append(joined)
+            edge_dependencies = [
+                DependencySite(node, DependencyOrigin.ROUTER, edge.module)
+                for node in edge.dependencies
+                if edge.module is not None
+            ]
+            variants.append(
+                RouteVariant(
+                    prefix=joined,
+                    dependencies=[
+                        *parent_variant.dependencies,
+                        *edge_dependencies,
+                        *(
+                            DependencySite(node, DependencyOrigin.ROUTER, router.module)
+                            for node in router.own_dependencies
+                        ),
+                    ],
+                    tags=[
+                        *parent_variant.tags,
+                        *edge.tags,
+                        *router.own_tags,
+                    ],
+                )
+            )
+        if parent:
+            inherited_dependencies.extend(parent.effective_dependency_items)
+        elif edge.app:
+            inherited_dependencies.extend(graph.app_dependencies.get(edge.app, []))
         inherited_dependencies.extend(
-            [*(parent.effective_dependencies if parent else []), *edge.dependencies]
+            DependencySite(node, DependencyOrigin.ROUTER, edge.module)
+            for node in edge.dependencies
+            if edge.module is not None
         )
         inherited_tags.extend([*(parent.effective_tags if parent else []), *edge.tags])
 
     visiting.discard(ref)
 
     router.full_prefixes = prefixes
-    router.inherited_dependencies = [*graph.app_dependencies, *inherited_dependencies]
+    router.inherited_dependency_items = inherited_dependencies
     router.inherited_tags = inherited_tags
+    router.route_variants = variants
     router.is_mounted = True
     return router
+
+
+def _own_variant(router: RouterDef, prefix: str) -> RouteVariant:
+    return RouteVariant(
+        prefix=prefix,
+        dependencies=[
+            DependencySite(node, DependencyOrigin.ROUTER, router.module)
+            for node in router.own_dependencies
+        ],
+        tags=list(router.own_tags),
+    )
 
 
 def _join_prefix(*parts: str) -> str:

@@ -19,7 +19,7 @@ from typing import Protocol, runtime_checkable
 
 from testweaver.analyzer.index.context import ProjectIndex
 from testweaver.analyzer.index.file_index import ModuleInfo
-from testweaver.analyzer.index.router_graph import RouterDef
+from testweaver.analyzer.index.router_graph import DependencySite, RouterDef
 from testweaver.analyzer.models import (
     AnalysisNote,
     Constraint,
@@ -45,6 +45,8 @@ class ExtractionContext:
     router: RouterDef | None
     endpoint: Endpoint
     prefix: str = ""
+    inherited_dependencies: list[DependencySite] = field(default_factory=list)
+    inherited_tags: list[str] = field(default_factory=list)
     constraints: list[Constraint] = field(default_factory=list)
     notes: list[AnalysisNote] = field(default_factory=list)
 
