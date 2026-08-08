@@ -294,6 +294,27 @@ def iter_functions(tree: ast.AST) -> Iterator[ast.FunctionDef | ast.AsyncFunctio
             yield node
 
 
+def iter_runtime_nodes(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> Iterator[ast.AST]:
+    """함수가 호출될 때 실행되는 본문 노드만 순회한다.
+
+    ``ast.walk(function)`` 은 실행되지 않은 중첩 함수·클래스의 본문까지
+    내려간다. 그 안의 ``raise`` 나 외부 호출을 바깥 함수의 동작으로
+    보고하면 존재하지 않는 실패 케이스와 목 요구사항이 만들어진다.
+    """
+    stack: list[ast.AST] = list(reversed(function.body))
+    while stack:
+        node = stack.pop()
+        yield node
+        if isinstance(
+            node,
+            ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda,
+        ):
+            continue
+        stack.extend(reversed(list(ast.iter_child_nodes(node))))
+
+
 # ─────────────────────────── 어노테이션 ───────────────────────────
 
 

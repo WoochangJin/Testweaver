@@ -16,6 +16,7 @@ import ast
 
 from testweaver.analyzer.ast_utils import (
     argument_of,
+    iter_runtime_nodes,
     literal_value,
     resolve_status_constant,
 )
@@ -78,7 +79,12 @@ class ExceptionExtractor:
         flows: list[ExceptionFlow],
         visited: set[str],
     ) -> None:
-        for child in ast.walk(node):
+        children = (
+            iter_runtime_nodes(node)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+            else ast.walk(node)
+        )
+        for child in children:
             if isinstance(child, ast.Raise):
                 flow = self._flow_of(context, child, module_path, owner, depth)
                 if flow is not None:

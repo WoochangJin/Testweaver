@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import ast
 
-from testweaver.analyzer.ast_utils import attribute_or_name
+from testweaver.analyzer.ast_utils import attribute_or_name, iter_runtime_nodes
 from testweaver.analyzer.extractors.base import ExtractionContext
 
 #: 이 이름의 객체를 통해 호출하면 외부 자원으로 본다.
@@ -76,7 +76,7 @@ class EffectExtractor:
 
         typed = _externally_typed_args(context)
 
-        for node in ast.walk(context.handler):
+        for node in iter_runtime_nodes(context.handler):
             if not isinstance(node, ast.Call):
                 continue
 
