@@ -67,4 +67,5 @@ def extract_features(
     return AnalysisResult(
         features=features,
         notes=[*index.notes, *(note for feature in features for note in feature.notes)],
+        root=index.root,
     )

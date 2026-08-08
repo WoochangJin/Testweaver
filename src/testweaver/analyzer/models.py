@@ -258,10 +258,13 @@ class AnalysisResult:
     """`analyze_project()` 의 반환값.
 
     `notes` 에는 인덱싱 단계의 전역 노트와 기능별 노트가 모두 모인다.
+    `root` 는 분석 대상 경로다. 산출물에 절대 경로가 새어 나가지 않도록
+    직렬화할 때 이 기준으로 상대 경로를 만든다.
     """
 
     features: list[Feature] = field(default_factory=list)
     notes: list[AnalysisNote] = field(default_factory=list)
+    root: Path | None = None
 
     def notes_with(self, code: NoteCode) -> list[AnalysisNote]:
         return [note for note in self.notes if note.code is code]
