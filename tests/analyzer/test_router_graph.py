@@ -19,14 +19,14 @@ def _graph_of(sources: dict[str, str], notes: list | None = None):
         for name, source in sources.items()
     }
     import_maps = {m.path: build_import_map(m) for m in modules.values()}
-    return build_router_graph(modules, import_maps, notes)
+    return build_router_graph(modules, import_maps, notes=notes)
 
 
 @pytest.fixture(scope="module")
 def fixture_graph():
     modules = collect_modules(FIXTURE_ROOT)
     import_maps = {m.path: build_import_map(m) for m in modules.values()}
-    return build_router_graph(modules, import_maps, [])
+    return build_router_graph(modules, import_maps, notes=[])
 
 
 # ─────────────── 실제 픽스처 ───────────────

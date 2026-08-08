@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from testweaver.analyzer.ast_utils import attribute_or_name
+from testweaver.analyzer.index.constants import index_constants, index_instances
 from testweaver.analyzer.index.file_index import ModuleInfo, collect_modules
 from testweaver.analyzer.index.handler_map import index_exception_handlers
 from testweaver.analyzer.index.import_map import ImportMap, build_import_map
@@ -44,6 +45,8 @@ class ProjectIndex:
     classes_by_name: dict[str, list[ClassDef]] = field(default_factory=dict)
     functions: dict[str, FunctionDef] = field(default_factory=dict)
     functions_by_name: dict[str, list[FunctionDef]] = field(default_factory=dict)
+    constants: dict[str, Any] = field(default_factory=dict)
+    instances: dict[str, str] = field(default_factory=dict)
     routers: RouterGraph = field(default_factory=RouterGraph)
     exception_status: dict[SymbolRef, int] = field(default_factory=dict)
     notes: list[AnalysisNote] = field(default_factory=list)
@@ -117,9 +120,49 @@ class ProjectIndex:
             )
         return None
 
+    def find_callable(self, ref: SymbolRef | None) -> FunctionDef | None:
+        """호출 가능한 대상을 찾는다. 함수가 아니어도 된다.
+
+        `throttle = RateLimiter(limit=10)` 처럼 인스턴스를 의존성으로 넘기는
+        형태가 흔하다. 이때 실제로 실행되는 건 그 클래스의 `__call__` 이고,
+        파라미터 선언도 거기 있다. 변수 → 클래스 → __call__ 로 되짚는다.
+        """
+        direct = self.find_function(ref)
+        if direct is not None:
+            return direct
+        if ref is None:
+            return None
+
+        class_name = self.instances.get(
+            f"{ref.module}.{ref.name}" if ref.module else ref.name
+        )
+        if class_name is None:
+            return None
+
+        module = self.modules.get(ref.file) if ref.file else None
+        owner = self.find_class(
+            self.resolve(module.path, class_name)
+            if module
+            else SymbolRef(class_name, ref.module)
+        )
+        if owner is None:
+            return None
+        for statement in owner.node.body:
+            if (
+                isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef)
+                and statement.name == "__call__"
+            ):
+                return FunctionDef(name=ref.name, node=statement, module=owner.module)
+        return None
+
     def is_in_project(self, ref: SymbolRef | None) -> bool:
         """프로젝트가 정의한 심볼인지. 아니면 서드파티다."""
-        return self.find_class(ref) is not None or self.find_function(ref) is not None
+        if ref is None:
+            return False
+        if self.find_class(ref) is not None or self.find_function(ref) is not None:
+            return True
+        key = f"{ref.module}.{ref.name}" if ref.module else ref.name
+        return key in self.instances or key in self.constants
 
     # ─────────────── 모델 ───────────────
 
@@ -224,7 +267,11 @@ def build_index(
     }
     index.classes, index.classes_by_name = index_classes(index.modules)
     index.functions, index.functions_by_name = index_functions(index.modules)
-    index.routers = build_router_graph(index.modules, index.imports, index.notes)
+    index.constants = index_constants(index.modules)
+    index.instances = index_instances(index.modules)
+    index.routers = build_router_graph(
+        index.modules, index.imports, index.constants, index.notes
+    )
     index.exception_status = index_exception_handlers(
         index.modules, index.imports, index.notes
     )

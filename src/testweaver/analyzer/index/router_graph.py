@@ -28,6 +28,7 @@ from testweaver.analyzer.ast_utils import (
     literal_value,
     split_attribute_call,
 )
+from testweaver.analyzer.index.constants import resolve_value
 from testweaver.analyzer.index.file_index import ModuleInfo
 from testweaver.analyzer.index.import_map import ImportMap
 from testweaver.analyzer.models import AnalysisNote, NoteCode, NoteLevel, SymbolRef
@@ -89,14 +90,16 @@ class RouterGraph:
 def build_router_graph(
     modules: dict[object, ModuleInfo],
     import_maps: dict[object, ImportMap],
+    constants: dict[str, object] | None = None,
     notes: list[AnalysisNote] | None = None,
 ) -> RouterGraph:
     """라우터 정의와 마운트를 수집한 뒤 최종 prefix 를 계산한다."""
+    constants = constants or {}
     graph = RouterGraph()
     for module in modules.values():
-        _collect_definitions(module, graph)
+        _collect_definitions(module, graph, import_maps[module.path], constants)
     for module in modules.values():
-        _collect_mounts(module, import_maps[module.path], graph, notes)
+        _collect_mounts(module, import_maps[module.path], graph, constants, notes)
     resolve_prefixes(graph, notes)
     return graph
 
@@ -104,7 +107,12 @@ def build_router_graph(
 # ─────────────────────────── 수집 ───────────────────────────
 
 
-def _collect_definitions(module: ModuleInfo, graph: RouterGraph) -> None:
+def _collect_definitions(
+    module: ModuleInfo,
+    graph: RouterGraph,
+    imports: ImportMap,
+    constants: dict[str, object],
+) -> None:
     """`x = APIRouter(...)` 와 `app = FastAPI(...)` 를 찾는다."""
     for node in ast.walk(module.tree):
         target, call = _assignment_call(node)
@@ -117,7 +125,7 @@ def _collect_definitions(module: ModuleInfo, graph: RouterGraph) -> None:
             graph.routers[ref] = RouterDef(
                 ref=ref,
                 module=module,
-                own_prefix=_literal_prefix(call),
+                own_prefix=_declared_prefix(call, module, imports, constants),
                 own_dependencies=_dependency_items(call),
                 own_tags=_tag_items(call),
             )
@@ -130,6 +138,7 @@ def _collect_mounts(
     module: ModuleInfo,
     imports: ImportMap,
     graph: RouterGraph,
+    constants: dict[str, object],
     notes: list[AnalysisNote] | None,
 ) -> None:
     """`<대상>.include_router(<라우터>, prefix=...)` 호출을 모은다.
@@ -169,7 +178,7 @@ def _collect_mounts(
             MountEdge(
                 parent=parent,
                 child=child,
-                prefix=_literal_prefix(node, notes, module),
+                prefix=_declared_prefix(node, module, imports, constants, notes),
                 dependencies=_dependency_items(node),
                 tags=_tag_items(node),
                 module=module,
@@ -306,16 +315,23 @@ def _symbol_of(
     return None
 
 
-def _literal_prefix(
+def _declared_prefix(
     call: ast.Call,
+    module: ModuleInfo,
+    imports: ImportMap,
+    constants: dict[str, object],
     notes: list[AnalysisNote] | None = None,
-    module: ModuleInfo | None = None,
 ) -> str:
-    """`prefix=` 인자를 문자열로. 리터럴이 아니면 빈 문자열 + 노트."""
+    """`prefix=` 인자를 문자열로 바꾼다.
+
+    리터럴이 아니어도 모듈 상수(`API_PREFIX = "/api"`)면 값을 따라간다.
+    실무 코드는 경로 조각을 그 자리에 적지 않는 경우가 많고, 이걸 놓치면
+    그 라우터에 달린 경로가 전부 어긋난다.
+    """
     node = keyword_of(call, "prefix")
     if node is None:
         return ""
-    value = literal_value(node)
+    value = resolve_value(node, module, imports, constants)
     if isinstance(value, str):
         return value
     if value is UNRESOLVED:
