@@ -13,9 +13,18 @@
 
 import pytest
 
-from tests.conftest import EDGE_ROOT, FIXTURE_ROOT
+from tests.conftest import (
+    ALIAS_ROOT,
+    EDGE_ROOT,
+    FIXTURE_ROOT,
+    FLOW_ROOT,
+    VARIANT_ROOT,
+)
+from tests.fixtures.alias_app.main import app as alias_app
 from tests.fixtures.edge_app.main import app as edge_app
+from tests.fixtures.flow_app.main import app as flow_app
 from tests.fixtures.sample_app.main import app as sample_app
+from tests.fixtures.variant_app.main import app as variant_app
 from testweaver.analyzer.pipeline import analyze_project
 
 pytestmark = pytest.mark.parity
@@ -27,6 +36,9 @@ HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 APPS = [
     pytest.param(sample_app, FIXTURE_ROOT, id="sample"),
     pytest.param(edge_app, EDGE_ROOT, id="edge"),
+    pytest.param(variant_app, VARIANT_ROOT, id="variant"),
+    pytest.param(flow_app, FLOW_ROOT, id="flow"),
+    pytest.param(alias_app, ALIAS_ROOT, id="alias"),
 ]
 
 #: 정적 분석으로는 경로를 알 수 없어 대조에서 빼는 라우트.
@@ -86,7 +98,8 @@ def test_no_parameter_is_missing(app, root):
 @pytest.mark.parametrize(("app", "root"), APPS)
 def test_required_body_fields_match(app, root):
     spec, features = app.openapi(), _features(root)
-    schemas = spec["components"]["schemas"]
+    # 본문이 하나도 없는 앱에는 components 자체가 없다.
+    schemas = spec.get("components", {}).get("schemas", {})
     for feature in features.values():
         model = feature.endpoint.request_model
         if model is None or model.name not in schemas:
@@ -120,7 +133,8 @@ def test_success_status_codes_match(app, root):
 def test_body_constraints_match(app, root):
     spec, features = app.openapi(), _features(root)
     """minLength/maximum/pattern/enum 이 스펙과 같은 값인지."""
-    schemas = spec["components"]["schemas"]
+    # 본문이 하나도 없는 앱에는 components 자체가 없다.
+    schemas = spec.get("components", {}).get("schemas", {})
     keys = {
         "minLength": "min_length",
         "maxLength": "max_length",
