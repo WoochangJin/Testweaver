@@ -8,11 +8,11 @@ prefix 를 합성해 완전한 형태로 만들어 두어야, 뒤의 파라미�
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 
 from testweaver.analyzer.ast_utils import (
-    UNRESOLVED,
     all_decorator_calls,
     argument_of,
     keyword_of,
@@ -201,16 +201,20 @@ class RouteExtractor:
         return [*inherited, *own]
 
 
+#: `{file_path:path}` 처럼 이름 뒤에 붙는 변환기.
+_PATH_CONVERTER = re.compile(r"\{([^:}]+):[^}]*\}")
+
+
 def join_path(prefix: str, path: str) -> str:
     """prefix 와 라우트 경로를 FastAPI 와 같은 규칙으로 잇는다.
 
     ("/api/v1/orders", "")            → "/api/v1/orders"
     ("/api/v1/orders", "/{order_id}") → "/api/v1/orders/{order_id}"
     ("",               "/health")     → "/health"
+    ("",               "/{p:path}")   → "/{p}"
+
+    변환기(`:path`)는 라우팅 규칙이지 URL 의 일부가 아니다. FastAPI 도
+    스펙에서 떼어 내며, 남겨 두면 생성된 테스트가 없는 주소를 호출한다.
     """
     joined = f"{prefix.rstrip('/')}{path}"
-    return joined or "/"
-
-
-def is_unresolved(value: object) -> bool:
-    return value is UNRESOLVED
+    return _PATH_CONVERTER.sub(r"{\1}", joined) or "/"
