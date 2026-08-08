@@ -139,10 +139,13 @@ class ProjectIndex:
         if class_name is None:
             return None
 
-        module = self.modules.get(ref.file) if ref.file else None
+        # 클래스 이름은 **인스턴스를 선언한 모듈** 기준으로 해석해야 한다.
+        # 클래스가 다른 파일에 있으면 그 모듈의 import 를 타야 찾을 수 있고,
+        # 이름만으로 찾으면 같은 이름의 다른 클래스를 집어 온다.
+        declaring = self.module_for(ref.module)
         owner = self.find_class(
-            self.resolve(module.path, class_name)
-            if module
+            self.resolve(declaring.path, class_name)
+            if declaring
             else SymbolRef(class_name, ref.module)
         )
         if owner is None:
@@ -153,6 +156,15 @@ class ProjectIndex:
                 and statement.name == "__call__"
             ):
                 return FunctionDef(name=ref.name, node=statement, module=owner.module)
+        return None
+
+    def module_for(self, module_path: str | None) -> ModuleInfo | None:
+        """점 표기 모듈 경로로 모듈을 찾는다."""
+        if not module_path:
+            return None
+        for module in self.modules.values():
+            if module.module_path == module_path:
+                return module
         return None
 
     def is_in_project(self, ref: SymbolRef | None) -> bool:

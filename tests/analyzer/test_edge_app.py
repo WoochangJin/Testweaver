@@ -87,9 +87,20 @@ def test_callable_class_dependency_is_resolved(features):
     """`throttle = RateLimiter(10)` 은 함수가 아니라 변수다.
 
     클래스까지 되짚지 못하면 `__call__` 이 선언한 파라미터를 통째로 놓친다.
+    클래스는 deps.py 가 아니라 limits.py 에 있고, other.py 에는 이름이 같은
+    다른 클래스가 있다. 인스턴스를 선언한 모듈의 import 를 타야 정확히
+    골라낼 수 있다.
     """
     session = constraint(features["POST /api/secure/search"], "session")
     assert session.location is ParamLocation.COOKIE
+
+
+def test_callable_class_exceptions_are_collected(features):
+    """`__call__` 안의 raise 도 이 엔드포인트에서 난다."""
+    statuses = {
+        e.status_code for e in features["POST /api/secure/search"].endpoint.exceptions
+    }
+    assert 429 in statuses
 
 
 def test_callable_class_dependency_is_not_reported_as_external(result):
