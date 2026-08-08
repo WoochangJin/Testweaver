@@ -22,7 +22,6 @@ from testweaver.analyzer.ast_utils import (
     iter_all_args,
     keyword_of,
     literal_value,
-    unwrap_annotation,
 )
 from testweaver.analyzer.extractors.base import ExtractionContext
 from testweaver.analyzer.extractors.fields import (
@@ -63,7 +62,7 @@ class DependencyExtractor:
 
         # 핸들러 인자.
         for arg, default in iter_all_args(context.handler):
-            info = unwrap_annotation(arg.annotation)
+            info = context.index.annotation(context.module.path, arg.annotation)
             marker = find_marker(default, info.metadata, DEPENDENCY_MARKERS)
             if marker is not None:
                 self._add(
@@ -130,7 +129,7 @@ class DependencyExtractor:
         if target is None:
             return
         for arg, default in iter_all_args(target.node):
-            info = unwrap_annotation(arg.annotation)
+            info = context.index.annotation(context.module.path, arg.annotation)
             marker = find_marker(default, info.metadata, DEPENDENCY_MARKERS)
             if marker is None:
                 continue

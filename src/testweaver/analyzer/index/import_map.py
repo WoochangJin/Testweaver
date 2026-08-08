@@ -87,6 +87,11 @@ def _read_import_from(
             continue
         local = alias.asname or alias.name
         result.symbols[local] = SymbolRef(name=alias.name, module=origin or None)
+        # `from . import svc` 처럼 가져온 것이 모듈일 수 있다. 그때는
+        # `svc.DomainError` 로 접근하므로 모듈 경로로도 기억해 둔다.
+        result.modules.setdefault(
+            local, f"{origin}.{alias.name}" if origin else alias.name
+        )
 
 
 def _resolve_relative(package: str, level: int, module: str | None) -> str:

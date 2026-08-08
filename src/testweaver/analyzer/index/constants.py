@@ -57,6 +57,24 @@ def index_instances(modules: dict[Any, ModuleInfo]) -> dict[str, str]:
     return found
 
 
+def index_type_aliases(modules: dict[Any, ModuleInfo]) -> dict[str, ast.expr]:
+    """모듈 최상위의 타입 별칭.
+
+        CommonDep = Annotated[dict, Depends(common)]
+        def handler(ctx: CommonDep): ...
+
+    FastAPI 문서가 권장하는 형태다. 별칭을 풀지 못하면 그 안의 `Depends` 가
+    보이지 않아 의존성도, 그 의존성이 선언한 파라미터도 통째로 사라진다.
+    """
+    found: dict[str, ast.expr] = {}
+    for module in modules.values():
+        for statement in module.tree.body:
+            for name, value in _assignments(statement):
+                if isinstance(value, ast.Subscript | ast.BinOp):
+                    found[_qualified(module, name)] = value
+    return found
+
+
 def resolve_value(
     node: ast.expr | None,
     module: ModuleInfo,

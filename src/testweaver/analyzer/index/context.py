@@ -12,8 +12,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from testweaver.analyzer.ast_utils import attribute_or_name
-from testweaver.analyzer.index.constants import index_constants, index_instances
+from testweaver.analyzer.ast_utils import (
+    AnnotationInfo,
+    attribute_or_name,
+    unwrap_annotation,
+)
+from testweaver.analyzer.index.constants import (
+    index_constants,
+    index_instances,
+    index_type_aliases,
+)
 from testweaver.analyzer.index.file_index import ModuleInfo, collect_modules
 from testweaver.analyzer.index.handler_map import index_exception_handlers
 from testweaver.analyzer.index.import_map import ImportMap, build_import_map
@@ -35,6 +43,9 @@ _PYDANTIC_ROOT = "BaseModel"
 #: 상속 사슬을 따라갈 때의 안전장치. 이보다 깊은 모델 계층은 실무에 없다.
 _MAX_BASE_DEPTH = 20
 
+#: 타입 별칭이 다시 별칭을 가리키는 깊이 제한.
+_MAX_ALIAS_DEPTH = 5
+
 
 @dataclass(slots=True)
 class ProjectIndex:
@@ -47,6 +58,7 @@ class ProjectIndex:
     functions_by_name: dict[str, list[FunctionDef]] = field(default_factory=dict)
     constants: dict[str, Any] = field(default_factory=dict)
     instances: dict[str, str] = field(default_factory=dict)
+    type_aliases: dict[str, ast.expr] = field(default_factory=dict)
     routers: RouterGraph = field(default_factory=RouterGraph)
     exception_status: dict[SymbolRef, int] = field(default_factory=dict)
     notes: list[AnalysisNote] = field(default_factory=list)
@@ -157,6 +169,38 @@ class ProjectIndex:
             ):
                 return FunctionDef(name=ref.name, node=statement, module=owner.module)
         return None
+
+    def annotation(self, from_file: Path, node: ast.expr | None) -> AnnotationInfo:
+        """어노테이션을 풀되, 타입 별칭이면 그 정의까지 따라간다.
+
+        `ctx: CommonDep` 만 보면 그냥 이름 하나다. 별칭을 펼쳐야 그 안의
+        `Depends(...)` 와 제약이 드러난다.
+        """
+        info = unwrap_annotation(node)
+        return self._expand_alias(from_file, info, depth=0)
+
+    def _expand_alias(
+        self, from_file: Path, info: AnnotationInfo, depth: int
+    ) -> AnnotationInfo:
+        if info.base_name is None or depth > _MAX_ALIAS_DEPTH:
+            return info
+        ref = self.resolve(from_file, info.base_name)
+        alias = self.type_aliases.get(
+            f"{ref.module}.{ref.name}" if ref.module else ref.name
+        )
+        if alias is None:
+            return info
+
+        declaring = self.module_for(ref.module)
+        expanded = self._expand_alias(
+            declaring.path if declaring else from_file,
+            unwrap_annotation(alias),
+            depth + 1,
+        )
+        # 바깥에서 덧붙인 메타데이터와 optional 여부는 유지한다.
+        expanded.metadata = [*expanded.metadata, *info.metadata]
+        expanded.is_optional = expanded.is_optional or info.is_optional
+        return expanded
 
     def module_for(self, module_path: str | None) -> ModuleInfo | None:
         """점 표기 모듈 경로로 모듈을 찾는다."""
@@ -281,6 +325,7 @@ def build_index(
     index.functions, index.functions_by_name = index_functions(index.modules)
     index.constants = index_constants(index.modules)
     index.instances = index_instances(index.modules)
+    index.type_aliases = index_type_aliases(index.modules)
     index.routers = build_router_graph(
         index.modules, index.imports, index.constants, index.notes
     )
