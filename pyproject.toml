@@ -32,3 +32,8 @@ testpaths = ["tests"]
 markers = [
     "parity: OpenAPI 스펙과의 대조 (보조 검증). `-m 'not parity'` 로 제외 가능",
 ]
+filterwarnings = [
+    # edge_app 은 api_route(methods=[GET, POST]) 를 일부러 쓴다. 한 함수가
+    # 두 오퍼레이션이 되므로 FastAPI 가 중복 ID 를 경고하지만 의도된 형태다.
+    "ignore:Duplicate Operation ID:UserWarning",
+]

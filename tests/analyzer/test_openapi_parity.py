@@ -13,8 +13,9 @@
 
 import pytest
 
-from tests.conftest import FIXTURE_ROOT
-from tests.fixtures.sample_app.main import app
+from tests.conftest import EDGE_ROOT, FIXTURE_ROOT
+from tests.fixtures.edge_app.main import app as edge_app
+from tests.fixtures.sample_app.main import app as sample_app
 from testweaver.analyzer.pipeline import analyze_project
 
 pytestmark = pytest.mark.parity
@@ -22,14 +23,19 @@ pytestmark = pytest.mark.parity
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 
 
-@pytest.fixture(scope="module")
-def spec() -> dict:
-    return app.openapi()
+#: (앱, 분석 루트) 쌍. 두 픽스처를 같은 대조에 건다.
+APPS = [
+    pytest.param(sample_app, FIXTURE_ROOT, id="sample"),
+    pytest.param(edge_app, EDGE_ROOT, id="edge"),
+]
+
+#: 정적 분석으로는 경로를 알 수 없어 대조에서 빼는 라우트.
+#: `add_api_route` 는 인자가 런타임 값이다. 빠뜨리되 노트로 알린다.
+UNREACHABLE = {("/ping", "GET")}
 
 
-@pytest.fixture(scope="module")
-def features() -> dict:
-    result = analyze_project(FIXTURE_ROOT)
+def _features(root) -> dict:
+    result = analyze_project(root)
     return {(f.endpoint.path, f.endpoint.method.value): f for f in result.features}
 
 
@@ -40,26 +46,33 @@ def _operations(spec: dict):
                 yield path, method.upper(), operation
 
 
-def test_no_route_is_missing(spec, features):
+@pytest.mark.parametrize(("app", "root"), APPS)
+def test_no_route_is_missing(app, root):
+    spec, features = app.openapi(), _features(root)
     """경로 대조는 곧 prefix 합성 전체의 검증이다.
 
     OpenAPI 의 paths 키는 이미 prefix 가 합쳐진 완전 경로다.
     """
-    declared = {(path, method) for path, method, _ in _operations(spec)}
+    declared = {(path, method) for path, method, _ in _operations(spec)} - UNREACHABLE
     assert declared - set(features) == set()
 
 
-def test_no_route_is_invented(spec, features):
+@pytest.mark.parametrize(("app", "root"), APPS)
+def test_no_route_is_invented(app, root):
+    spec, features = app.openapi(), _features(root)
     declared = {(path, method) for path, method, _ in _operations(spec)}
     assert set(features) - declared == set()
 
 
-def test_no_parameter_is_missing(spec, features):
+@pytest.mark.parametrize(("app", "root"), APPS)
+def test_no_parameter_is_missing(app, root):
+    spec, features = app.openapi(), _features(root)
     """의존성 안에 선언된 헤더까지 포함해서 대조한다."""
     declared = {
         (path, method, parameter["name"], parameter["in"])
         for path, method, operation in _operations(spec)
         for parameter in operation.get("parameters", [])
+        if (path, method) not in UNREACHABLE
     }
     extracted = {
         (path, method, constraint.field_name, constraint.location.value)
@@ -70,7 +83,9 @@ def test_no_parameter_is_missing(spec, features):
     assert declared - extracted == set()
 
 
-def test_required_body_fields_match(spec, features):
+@pytest.mark.parametrize(("app", "root"), APPS)
+def test_required_body_fields_match(app, root):
+    spec, features = app.openapi(), _features(root)
     schemas = spec["components"]["schemas"]
     for feature in features.values():
         model = feature.endpoint.request_model
@@ -87,8 +102,12 @@ def test_required_body_fields_match(spec, features):
         assert extracted == declared, model.name
 
 
-def test_success_status_codes_match(spec, features):
+@pytest.mark.parametrize(("app", "root"), APPS)
+def test_success_status_codes_match(app, root):
+    spec, features = app.openapi(), _features(root)
     for path, method, operation in _operations(spec):
+        if (path, method) in UNREACHABLE:
+            continue
         successes = {
             int(code)
             for code in operation["responses"]
@@ -97,7 +116,9 @@ def test_success_status_codes_match(spec, features):
         assert features[(path, method)].endpoint.success_status_code in successes
 
 
-def test_body_constraints_match(spec, features):
+@pytest.mark.parametrize(("app", "root"), APPS)
+def test_body_constraints_match(app, root):
+    spec, features = app.openapi(), _features(root)
     """minLength/maximum/pattern/enum 이 스펙과 같은 값인지."""
     schemas = spec["components"]["schemas"]
     keys = {
