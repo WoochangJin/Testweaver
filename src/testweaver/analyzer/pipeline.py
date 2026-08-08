@@ -46,6 +46,7 @@ def extract_features(
                 decorator=site.decorator,
                 method=site.method,
                 router=site.router,
+                prefix=site.prefix,
                 endpoint=Endpoint(
                     path="", method=site.method, handler_name=site.handler.name
                 ),

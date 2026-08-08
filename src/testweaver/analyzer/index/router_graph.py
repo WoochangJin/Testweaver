@@ -48,10 +48,16 @@ class RouterDef:
     own_tags: list[str] = field(default_factory=list)
 
     #: 마운트 사슬을 모두 반영한 결과. `resolve_prefixes()` 가 채운다.
-    full_prefix: str = ""
+    #: 같은 라우터를 여러 곳에 마운트하면 FastAPI 는 라우트를 그만큼 만든다.
+    full_prefixes: list[str] = field(default_factory=list)
     inherited_dependencies: list[ast.expr] = field(default_factory=list)
     inherited_tags: list[str] = field(default_factory=list)
     is_mounted: bool = False
+
+    @property
+    def full_prefix(self) -> str:
+        """대표 prefix. 마운트가 하나뿐인 흔한 경우를 위한 편의 속성이다."""
+        return self.full_prefixes[0] if self.full_prefixes else ""
 
     @property
     def effective_dependencies(self) -> list[ast.expr]:
@@ -146,6 +152,8 @@ def _collect_mounts(
     `create_app()` 안에서 호출하는 경우도 있으므로 최상위만 보지 않고
     트리 전체를 훑는다.
     """
+    loop_bindings = _loop_bindings(module)
+
     for node in ast.walk(module.tree):
         if not isinstance(node, ast.Call):
             continue
@@ -154,8 +162,11 @@ def _collect_mounts(
             continue
 
         child_expr = argument_of(node, 0, "router")
-        child = _symbol_of(child_expr, module, imports)
-        if child is None:
+        for child in _mount_targets(child_expr, module, imports, loop_bindings):
+            _record_mount(
+                node, receiver, child, module, imports, graph, constants, notes
+            )
+        if not _mount_targets(child_expr, module, imports, loop_bindings):
             _note(
                 notes,
                 NoteLevel.WARNING,
@@ -164,27 +175,68 @@ def _collect_mounts(
                 module,
                 node.lineno,
             )
+
+
+def _record_mount(
+    node: ast.Call,
+    receiver: str | None,
+    child: SymbolRef,
+    module: ModuleInfo,
+    imports: ImportMap,
+    graph: RouterGraph,
+    constants: dict[str, object],
+    notes: list[AnalysisNote] | None,
+) -> None:
+    parent_ref = (
+        SymbolRef(name=receiver, module=module.module_path, file=module.path)
+        if receiver
+        else None
+    )
+    # 대상이 라우터가 아니면 앱으로 본다 (app.include_router).
+    parent = parent_ref if parent_ref in graph.routers else None
+
+    graph.mounts.append(
+        MountEdge(
+            parent=parent,
+            child=child,
+            prefix=_declared_prefix(node, module, imports, constants, notes),
+            dependencies=_dependency_items(node),
+            tags=_tag_items(node),
+            module=module,
+            lineno=node.lineno,
+        )
+    )
+
+
+def _loop_bindings(module: ModuleInfo) -> dict[str, list[ast.expr]]:
+    """`for router in (v1, v2):` 의 반복 변수와 그 원소들.
+
+    라우터를 반복문으로 등록하는 코드가 흔하다. 반복 변수를 이름 그대로
+    해석하면 어느 라우터도 가리키지 않아 마운트가 통째로 사라진다.
+    """
+    bindings: dict[str, list[ast.expr]] = {}
+    for node in ast.walk(module.tree):
+        if not isinstance(node, ast.For) or not isinstance(node.target, ast.Name):
             continue
+        if isinstance(node.iter, ast.Tuple | ast.List | ast.Set):
+            bindings.setdefault(node.target.id, []).extend(node.iter.elts)
+    return bindings
 
-        parent_ref = (
-            SymbolRef(name=receiver, module=module.module_path, file=module.path)
-            if receiver
-            else None
-        )
-        # 대상이 라우터가 아니면 앱으로 본다 (app.include_router).
-        parent = parent_ref if parent_ref in graph.routers else None
 
-        graph.mounts.append(
-            MountEdge(
-                parent=parent,
-                child=child,
-                prefix=_declared_prefix(node, module, imports, constants, notes),
-                dependencies=_dependency_items(node),
-                tags=_tag_items(node),
-                module=module,
-                lineno=node.lineno,
-            )
-        )
+def _mount_targets(
+    expr: ast.expr | None,
+    module: ModuleInfo,
+    imports: ImportMap,
+    loop_bindings: dict[str, list[ast.expr]],
+) -> list[SymbolRef]:
+    """마운트 대상 라우터들. 반복 변수면 원소만큼 펼친다."""
+    if isinstance(expr, ast.Name) and expr.id in loop_bindings:
+        found = [
+            _symbol_of(element, module, imports) for element in loop_bindings[expr.id]
+        ]
+        return [ref for ref in found if ref is not None]
+    single = _symbol_of(expr, module, imports)
+    return [single] if single is not None else []
 
 
 # ─────────────────────────── prefix 해석 ───────────────────────────
@@ -221,45 +273,42 @@ def _resolve(
             f"라우터 마운트가 순환합니다: {ref}",
             router.module,
         )
-        router.full_prefix = router.own_prefix
+        router.full_prefixes = [router.own_prefix]
         return router
 
     edges = edges_by_child.get(ref, [])
     if not edges:
         # 어디에도 마운트되지 않은 라우터. 자기 prefix 만 쓴다.
-        router.full_prefix = router.own_prefix
+        router.full_prefixes = [router.own_prefix]
         return router
 
-    if len(edges) > 1:
-        _note(
-            notes,
-            NoteLevel.WARNING,
-            NoteCode.MULTI_MOUNT,
-            f"{ref} 가 {len(edges)}곳에 마운트됐습니다. 첫 번째만 반영합니다",
-            router.module,
-            edges[0].lineno,
-        )
-
-    edge = edges[0]
     visiting.add(ref)
-    parent = (
-        _resolve(edge.parent, graph, edges_by_child, visiting, notes)
-        if edge.parent is not None
-        else None
-    )
+    prefixes: list[str] = []
+    inherited_dependencies: list[ast.expr] = []
+    inherited_tags: list[str] = []
+
+    for edge in edges:
+        parent = (
+            _resolve(edge.parent, graph, edges_by_child, visiting, notes)
+            if edge.parent is not None
+            else None
+        )
+        # 부모가 여러 곳에 마운트됐으면 그만큼 경로가 늘어난다.
+        parent_prefixes = parent.full_prefixes if parent else [""]
+        for parent_prefix in parent_prefixes or [""]:
+            joined = _join_prefix(parent_prefix, edge.prefix, router.own_prefix)
+            if joined not in prefixes:
+                prefixes.append(joined)
+        inherited_dependencies.extend(
+            [*(parent.effective_dependencies if parent else []), *edge.dependencies]
+        )
+        inherited_tags.extend([*(parent.effective_tags if parent else []), *edge.tags])
+
     visiting.discard(ref)
 
-    parent_prefix = parent.full_prefix if parent else ""
-    router.full_prefix = _join_prefix(parent_prefix, edge.prefix, router.own_prefix)
-    router.inherited_dependencies = [
-        *graph.app_dependencies,
-        *(parent.effective_dependencies if parent else []),
-        *edge.dependencies,
-    ]
-    router.inherited_tags = [
-        *(parent.effective_tags if parent else []),
-        *edge.tags,
-    ]
+    router.full_prefixes = prefixes
+    router.inherited_dependencies = [*graph.app_dependencies, *inherited_dependencies]
+    router.inherited_tags = inherited_tags
     router.is_mounted = True
     return router
 

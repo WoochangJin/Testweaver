@@ -44,6 +44,7 @@ class ExtractionContext:
     method: HttpMethod
     router: RouterDef | None
     endpoint: Endpoint
+    prefix: str = ""
     constraints: list[Constraint] = field(default_factory=list)
     notes: list[AnalysisNote] = field(default_factory=list)
 

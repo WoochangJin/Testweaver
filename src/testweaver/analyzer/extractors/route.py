@@ -53,6 +53,9 @@ class RouteSite:
     decorator: ast.Call
     method: HttpMethod
     router: RouterDef | None
+    #: 이 라우트에 적용할 prefix. 라우터가 여러 곳에 마운트되면 사이트도
+    #: 그만큼 생긴다. FastAPI 가 실제로 라우트를 여러 벌 만들기 때문이다.
+    prefix: str = ""
 
 
 def find_routes(
@@ -82,14 +85,18 @@ def _routes_of(
             continue
         router = index.router_for(module.path, receiver) if receiver else None
 
+        prefixes = router.full_prefixes if router else []
+
         method = _METHOD_DECORATORS.get(attribute)
         if method is not None:
-            yield RouteSite(module, handler, decorator, method, router)
+            for prefix in prefixes or [""]:
+                yield RouteSite(module, handler, decorator, method, router, prefix)
             continue
 
         if attribute == _GENERIC_DECORATOR:
             for name in _declared_methods(decorator):
-                yield RouteSite(module, handler, decorator, name, router)
+                for prefix in prefixes or [""]:
+                    yield RouteSite(module, handler, decorator, name, router, prefix)
 
 
 def _declared_methods(decorator: ast.Call) -> list[HttpMethod]:
@@ -157,8 +164,7 @@ class RouteExtractor:
                 context.decorator.lineno,
             )
             declared = ""
-        prefix = context.router.full_prefix if context.router else ""
-        return join_path(prefix, declared)
+        return join_path(context.prefix, declared)
 
     def _success_status(self, context: ExtractionContext) -> int | None:
         """명시된 status_code 를 읽는다.

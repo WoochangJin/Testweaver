@@ -178,7 +178,8 @@ def test_non_literal_prefix_reports_note():
     assert NoteCode.UNRESOLVED_PREFIX in [n.code for n in notes]
 
 
-def test_multiple_mounts_are_flagged():
+def test_multiple_mounts_produce_every_prefix():
+    """FastAPI 는 마운트한 만큼 라우트를 만든다. 하나만 남기면 절반을 잃는다."""
     notes: list = []
     graph = _graph_of(
         {
@@ -193,8 +194,7 @@ def test_multiple_mounts_are_flagged():
         },
         notes,
     )
-    assert NoteCode.MULTI_MOUNT in [n.code for n in notes]
-    assert graph.get("r", "r").full_prefix == "/v1/x", "첫 마운트를 채택"
+    assert graph.get("r", "r").full_prefixes == ["/v1/x", "/v2/x"]
 
 
 def test_cyclic_mount_does_not_recurse_forever():
