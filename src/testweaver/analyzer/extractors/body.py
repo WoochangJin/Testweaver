@@ -19,6 +19,7 @@ from testweaver.analyzer.ast_utils import unwrap_annotation
 from testweaver.analyzer.extractors.base import ExtractionContext
 from testweaver.analyzer.extractors.fields import (
     DefaultInfo,
+    declared_alias,
     declared_default,
     field_constraints,
     marker_name,
@@ -125,7 +126,7 @@ def _constraints_for(
 
     nested = _nested_model(context, owner, info)
     constraint = Constraint(
-        field_name=name,
+        field_name=_wire_name(name, marker),
         type_name=_type_name(info),
         required=not declared.has_default,
         location=ParamLocation.BODY,
@@ -151,7 +152,9 @@ def _constraints_for(
     # 중첩 모델은 자기 자신도 남기고 내부 필드를 점 표기로 펼친다.
     return [
         constraint,
-        *collect_constraints(context, nested, seen, depth + 1, prefix=f"{name}."),
+        *collect_constraints(
+            context, nested, seen, depth + 1, prefix=f"{constraint.field_name}."
+        ),
     ]
 
 
@@ -237,6 +240,19 @@ def _resolve_default(marker: ast.Call | None, assigned: ast.expr | None) -> Defa
     if value is UNRESOLVED:
         return DefaultInfo(has_default=True)
     return DefaultInfo(has_default=True, value=value)
+
+
+def _wire_name(name: str, marker: ast.Call | None) -> str:
+    """별칭이 있으면 그쪽이 요청에 실려 나가는 이름이다.
+
+    파이썬 이름을 그대로 쓰면 생성된 요청의 키가 달라 검증에 걸린다.
+    중첩 필드는 앞의 경로가 이미 별칭으로 붙어 있으므로 마지막 조각만 바꾼다.
+    """
+    alias = declared_alias(marker)
+    if alias is None:
+        return name
+    head, sep, _ = name.rpartition(".")
+    return f"{head}{sep}{alias}" if sep else alias
 
 
 # ─────────────────────────── 타입 해석 ───────────────────────────

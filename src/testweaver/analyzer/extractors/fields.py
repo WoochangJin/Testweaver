@@ -113,6 +113,23 @@ def declared_default(call: ast.Call | None) -> DefaultInfo:
     return DefaultInfo(has_default=True, value=value)
 
 
+def declared_alias(call: ast.Call | None) -> str | None:
+    """요청에 실려 나가는 이름. 파이썬 이름과 다를 수 있다.
+
+        display_name: str = Field(alias="displayName")   →  "displayName"
+
+    Pydantic v2 는 입력 쪽 별칭을 `validation_alias` 로도 받는다. 요청 본문을
+    만들 때 쓰는 건 입력 별칭이므로 그쪽을 먼저 본다.
+    """
+    if call is None:
+        return None
+    for keyword in ("validation_alias", "alias"):
+        value = literal_value(keyword_of(call, keyword))
+        if isinstance(value, str):
+            return value
+    return None
+
+
 def marker_name(node: ast.expr | None) -> str | None:
     """호출이면 그 함수 이름을 준다. `Query(...)` → "Query"."""
     return attribute_or_name(node.func) if isinstance(node, ast.Call) else None

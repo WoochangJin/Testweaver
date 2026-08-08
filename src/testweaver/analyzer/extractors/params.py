@@ -18,7 +18,6 @@ from testweaver.analyzer.ast_utils import (
     iter_all_args,
     keyword_of,
     literal_value,
-    unwrap_annotation,
 )
 from testweaver.analyzer.extractors.base import ExtractionContext
 from testweaver.analyzer.extractors.fields import (
@@ -77,7 +76,7 @@ class ParamExtractor:
             if arg.arg in {"self", "cls"} or arg.arg in claimed:
                 continue
 
-            info = unwrap_annotation(arg.annotation)
+            info = context.index.annotation(origin_file, arg.annotation)
 
             # 의존성은 `dependency` 추출기의 몫이다.
             if find_marker(default, info.metadata, DEPENDENCY_MARKERS) is not None:
@@ -154,6 +153,12 @@ class ParamExtractor:
         if model is not None and context.index.is_pydantic_model(model):
             self._claim_body(context, model)
             return None
+
+        # 컨테이너 타입도 본문이다. `payload: dict[str, Any]` 나 `items: list[int]`
+        # 은 마커 없이 쓰면 FastAPI 가 본문으로 읽는다. 쿼리로 두면 요청이
+        # 엉뚱한 곳으로 실려 테스트가 통과할 수 없다.
+        if info.is_collection:
+            return ParamLocation.BODY
 
         # 남은 스칼라는 쿼리 파라미터다 (FastAPI 기본 규칙).
         return ParamLocation.QUERY

@@ -144,6 +144,10 @@ def _note(
 # ─────────────────────────── 리터럴 · 상태코드 ───────────────────────────
 
 
+#: 리터럴 하나를 감싸는 수치 생성자. 금액 제약에 흔히 쓰인다.
+_NUMERIC_WRAPPERS = {"Decimal", "Fraction"}
+
+
 def literal_value(node: ast.expr | None):
     """리터럴이면 그 값을, 아니면 `UNRESOLVED` 를 반환한다.
 
@@ -155,7 +159,26 @@ def literal_value(node: ast.expr | None):
     try:
         return ast.literal_eval(node)
     except (ValueError, SyntaxError, TypeError):
+        return _wrapped_number(node)
+
+
+def _wrapped_number(node: ast.expr):
+    """`Decimal("0.01")` 처럼 리터럴을 감싼 수치를 풀어 준다.
+
+    금액 필드의 `multiple_of` 나 `ge` 는 부동소수 오차를 피하려고 거의 항상
+    이 형태로 적힌다. 그냥 두면 제약이 통째로 사라진다.
+    """
+    if not isinstance(node, ast.Call) or len(node.args) != 1:
         return UNRESOLVED
+    if attribute_or_name(node.func) not in _NUMERIC_WRAPPERS:
+        return UNRESOLVED
+    inner = literal_value(node.args[0])
+    if isinstance(inner, str | int | float):
+        try:
+            return float(inner)
+        except ValueError:
+            return UNRESOLVED
+    return UNRESOLVED
 
 
 def resolve_status_constant(node: ast.expr | None) -> int | None:
