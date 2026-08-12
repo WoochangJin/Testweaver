@@ -1,0 +1,115 @@
+[
+  {
+    "feature_name": "login",
+    "endpoint": "/api/login",
+    "method": "POST",
+    "cases": [
+      {
+        "id": "login-001",
+        "feature_name": "login",
+        "category": "normal",
+        "description": "올바른 이메일/비밀번호로 로그인 성공",
+        "expected_status": 200,
+        "expected_error_code": null,
+        "sample_payload": {"email": "user@example.com", "password": "correct-pw"},
+        "source": "rule",
+        "selected": true
+      },
+      {
+        "id": "login-002",
+        "feature_name": "login",
+        "category": "failure",
+        "description": "존재하지 않는 이메일로 로그인 시도",
+        "expected_status": 401,
+        "expected_error_code": "USER_NOT_FOUND",
+        "sample_payload": {"email": "nobody@example.com", "password": "any"},
+        "source": "rule",
+        "selected": true
+      },
+      {
+        "id": "login-003",
+        "feature_name": "login",
+        "category": "boundary",
+        "description": "비밀번호 필드 누락",
+        "expected_status": 422,
+        "expected_error_code": null,
+        "sample_payload": {"email": "user@example.com"},
+        "source": "rule",
+        "selected": true
+      },
+      {
+        "id": "login-004",
+        "feature_name": "login",
+        "category": "security",
+        "description": "5회 연속 로그인 실패 시 계정 잠금",
+        "expected_status": 423,
+        "expected_error_code": "ACCOUNT_LOCKED",
+        "sample_payload": {"email": "user@example.com", "password": "wrong-pw"},
+        "source": "llm",
+        "selected": false
+      },
+      {
+        "id": "login-005",
+        "feature_name": "login",
+        "category": "failure",
+        "description": "탈퇴한 계정으로 로그인 시도 (예외 처리 흐름 미확정 - status_code 추출 실패 케이스)",
+        "expected_status": null,
+        "expected_error_code": null,
+        "sample_payload": {"email": "withdrawn@example.com", "password": "any"},
+        "source": "rule",
+        "selected": false
+      }
+    ]
+  },
+  {
+    "feature_name": "get_user_profile",
+    "endpoint": "/api/users/{user_id}",
+    "method": "GET",
+    "cases": [
+      {
+        "id": "profile-001",
+        "feature_name": "get_user_profile",
+        "category": "normal",
+        "description": "본인 프로필 정상 조회",
+        "expected_status": 200,
+        "expected_error_code": null,
+        "sample_payload": null,
+        "source": "rule",
+        "selected": true
+      },
+      {
+        "id": "profile-002",
+        "feature_name": "get_user_profile",
+        "category": "failure",
+        "description": "존재하지 않는 user_id 조회",
+        "expected_status": 404,
+        "expected_error_code": "USER_NOT_FOUND",
+        "sample_payload": null,
+        "source": "rule",
+        "selected": true
+      },
+      {
+        "id": "profile-003",
+        "feature_name": "get_user_profile",
+        "category": "boundary",
+        "description": "user_id가 숫자가 아닌 문자열로 전달됨",
+        "expected_status": 422,
+        "expected_error_code": null,
+        "sample_payload": null,
+        "source": "rule",
+        "selected": true
+      },
+      {
+        "id": "profile-004",
+        "feature_name": "get_user_profile",
+        "category": "security",
+        "description": "인증 토큰 없이 타인의 프로필 조회 시도",
+        "expected_status": 403,
+        "expected_error_code": "FORBIDDEN",
+        "sample_payload": null,
+        "source": "llm",
+        "selected": true
+      }
+    ]
+  }
+]
