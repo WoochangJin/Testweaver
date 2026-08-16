@@ -12,7 +12,7 @@ def test_render_matrices_prints_feature_and_case_identifiers():
     matrices = load_matrices(FIXTURE_PATH)
     console = Console(record=True, width=120)
     render_matrices(matrices, console=console)
-    output = console.exprot_text()
+    output = console.export_text()
     assert "login" in output
     assert "get_user_profile" in output
     assert "login-001" in output
@@ -28,4 +28,4 @@ def test_render_matrix_handles_missing_category_without_error():
     console = Console(record=True, width=120)
     render_matrix(only_normal, console)
     output = console.export_text()
-    assert "login=001" in output
+    assert "login-001" in output
