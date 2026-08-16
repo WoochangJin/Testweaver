@@ -340,6 +340,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "jinja2" },
+    { name = "pydantic" },
     { name = "rich" },
     { name = "typer" },
 ]
@@ -354,6 +355,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.140.13" },
     { name = "jinja2", specifier = ">=3.1.6" },
+    { name = "pydantic", specifier = ">=2.13.4" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "typer", specifier = ">=0.27.0" },
 ]
