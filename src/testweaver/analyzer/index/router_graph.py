@@ -59,6 +59,8 @@ class RouteVariant:
     prefix: str
     dependencies: list[DependencySite] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    #: 최상위 FastAPI 앱까지 연결된 실제 라우트인지 여부.
+    attached_to_app: bool = False
 
 
 @dataclass(slots=True)
@@ -358,6 +360,7 @@ def _resolve(
                 RouteVariant(
                     prefix="",
                     dependencies=list(graph.app_dependencies.get(edge.app, [])),
+                    attached_to_app=edge.app is not None,
                 )
             ]
 
@@ -387,6 +390,7 @@ def _resolve(
                         *edge.tags,
                         *router.own_tags,
                     ],
+                    attached_to_app=parent_variant.attached_to_app,
                 )
             )
         if parent:
