@@ -77,7 +77,7 @@ def find_routes(
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             yield from _routes_of(node, module, index)
         elif isinstance(node, ast.Call):
-            _warn_dynamic(node, module, notes)
+            _warn_dynamic(node, module, index, notes)
 
 
 def _routes_of(
@@ -100,11 +100,15 @@ def _routes_of(
         if router is None and owner not in index.routers.app_refs:
             continue
 
-        variants = (
-            router.route_variants
-            if router
-            else [RouteVariant("", app_dependencies, [])]
-        )
+        if router:
+            # FastAPI 앱이 존재하면 실제 앱에 연결된 라우터만 추출한다.
+            variants = (
+                [v for v in router.route_variants if v.attached_to_app]
+                if index.routers.app_refs
+                else router.route_variants
+            )
+        else:
+            variants = [RouteVariant("", app_dependencies, [], True)]
 
         method = _METHOD_DECORATORS.get(attribute)
         if method is not None:
@@ -149,25 +153,35 @@ def _declared_methods(decorator: ast.Call) -> list[HttpMethod]:
 
 
 def _warn_dynamic(
-    node: ast.Call, module: ModuleInfo, notes: list[AnalysisNote] | None
+    node: ast.Call,
+    module: ModuleInfo,
+    index: ProjectIndex,
+    notes: list[AnalysisNote] | None,
 ) -> None:
-    """`app.add_api_route(...)` 처럼 런타임에 다는 라우트를 알린다.
-
-    경로가 변수에서 오므로 정적으로는 알아낼 수 없다. 조용히 빠뜨리는
-    대신 "여기 놓친 게 있다"고 남긴다.
-    """
+    """FastAPI 앱이나 라우터의 동적 라우트 등록을 알린다."""
     if notes is None:
         return
-    if split_attribute_call(node)[1] in _DYNAMIC_REGISTRARS:
-        notes.append(
-            AnalysisNote(
-                NoteLevel.WARNING,
-                NoteCode.DYNAMIC_ROUTE,
-                "런타임에 등록되는 라우트라 경로를 확정할 수 없습니다",
-                str(module.path),
-                node.lineno,
-            )
+
+    receiver, attribute = split_attribute_call(node)
+
+    if attribute not in _DYNAMIC_REGISTRARS or receiver is None:
+        return
+
+    owner = index.resolve(module.path, receiver)
+
+    # 확인된 FastAPI 앱이나 APIRouter의 호출일 때만 경고한다.
+    if owner not in index.routers.routers and owner not in index.routers.app_refs:
+        return
+
+    notes.append(
+        AnalysisNote(
+            NoteLevel.WARNING,
+            NoteCode.DYNAMIC_ROUTE,
+            "런타임에 등록되는 라우트라 경로를 확정할 수 없습니다",
+            str(module.path),
+            node.lineno,
         )
+    )
 
 
 class RouteExtractor:
