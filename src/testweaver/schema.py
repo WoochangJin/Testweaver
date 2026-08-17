@@ -4,6 +4,7 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+
 class CaseCategory(str, Enum):
     """Categories used to classify generated test cases."""
 
