@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from rich.console import Console
@@ -29,3 +30,26 @@ def test_render_matrix_handles_missing_category_without_error():
     render_matrix(only_normal, console)
     output = console.export_text()
     assert "login-001" in output
+
+
+def test_render_matrix_numbers_cases_continuously_across_categories():
+    matrices = load_matrices(FIXTURE_PATH)
+
+    def row_number(output: str, case_id: str) -> str:
+        match = re.search(rf"(\d+)\D*{case_id}", output)
+        assert match, f"row for {case_id} not found"
+        return match.group(1)
+
+    login_console = Console(record=True, width=120)
+    render_matrix(matrices[0], login_console)
+    login_output = login_console.export_text()
+    assert row_number(login_output, "login-001") == "1"  # normal
+    assert row_number(login_output, "login-003") == "2"  # boundary
+    assert row_number(login_output, "login-002") == "3"  # failure
+    assert row_number(login_output, "login-005") == "4"  # failure
+    assert row_number(login_output, "login-004") == "5"  # security
+
+    profile_console = Console(record=True, width=120)
+    render_matrix(matrices[1], profile_console)
+    profile_output = profile_console.export_text()
+    assert row_number(profile_output, "profile-001") == "1"  # numbering resets per matrix
