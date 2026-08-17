@@ -18,16 +18,13 @@ class TestCase:
     description: str
     expected_status: int | None = None
     expected_error_code: str | None = None
-    source: str = "rule"  #"rule" | "llm"
+    source: str = "rule"  #"rule" | "ai"
     selected: bool = False
-    sample_payload: dict | None = None
 
 
 @dataclass
 class TestCaseMatrix:
     feature_name: str
-    endpoint: str
-    method: str
     cases: list[TestCase] = field(default_factory=list)
 
     def by_category(self, category: TestCaseCategory) -> list[TestCase]:
