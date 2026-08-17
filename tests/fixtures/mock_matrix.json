@@ -11,7 +11,11 @@
         "description": "올바른 이메일/비밀번호로 로그인 성공",
         "expected_status": 200,
         "expected_error_code": null,
-        "sample_payload": {"email": "user@example.com", "password": "correct-pw"},
+        "sample_payload": {
+          "email": "user@example.com",
+          "password": "correct-pw"
+        },
+        "path_params": null,
         "source": "rule",
         "selected": true
       },
@@ -22,7 +26,11 @@
         "description": "존재하지 않는 이메일로 로그인 시도",
         "expected_status": 401,
         "expected_error_code": "USER_NOT_FOUND",
-        "sample_payload": {"email": "nobody@example.com", "password": "any"},
+        "sample_payload": {
+          "email": "nobody@example.com",
+          "password": "any"
+        },
+        "path_params": null,
         "source": "rule",
         "selected": true
       },
@@ -33,7 +41,10 @@
         "description": "비밀번호 필드 누락",
         "expected_status": 422,
         "expected_error_code": null,
-        "sample_payload": {"email": "user@example.com"},
+        "sample_payload": {
+          "email": "user@example.com"
+        },
+        "path_params": null,
         "source": "rule",
         "selected": true
       },
@@ -44,7 +55,11 @@
         "description": "5회 연속 로그인 실패 시 계정 잠금",
         "expected_status": 423,
         "expected_error_code": "ACCOUNT_LOCKED",
-        "sample_payload": {"email": "user@example.com", "password": "wrong-pw"},
+        "sample_payload": {
+          "email": "user@example.com",
+          "password": "wrong-pw"
+        },
+        "path_params": null,
         "source": "llm",
         "selected": false
       },
@@ -55,7 +70,11 @@
         "description": "탈퇴한 계정으로 로그인 시도 (예외 처리 흐름 미확정 - status_code 추출 실패 케이스)",
         "expected_status": null,
         "expected_error_code": null,
-        "sample_payload": {"email": "withdrawn@example.com", "password": "any"},
+        "sample_payload": {
+          "email": "withdrawn@example.com",
+          "password": "any"
+        },
+        "path_params": null,
         "source": "rule",
         "selected": false
       },
@@ -66,7 +85,11 @@
         "description": "잠긴 계정으로 로그인 시도 (예외 처리 흐름 미확정 - status_code 추출 실패, selected: true로 skip 로직 검증용)",
         "expected_status": null,
         "expected_error_code": null,
-        "sample_payload": {"email": "locked@example.com", "password": "any"},
+        "sample_payload": {
+          "email": "locked@example.com",
+          "password": "any"
+        },
+        "path_params": null,
         "source": "rule",
         "selected": true
       }
@@ -85,6 +108,9 @@
         "expected_status": 200,
         "expected_error_code": null,
         "sample_payload": null,
+        "path_params": {
+          "user_id": 1
+        },
         "source": "rule",
         "selected": true
       },
@@ -96,6 +122,9 @@
         "expected_status": 404,
         "expected_error_code": "USER_NOT_FOUND",
         "sample_payload": null,
+        "path_params": {
+          "user_id": 9999
+        },
         "source": "rule",
         "selected": true
       },
@@ -107,6 +136,9 @@
         "expected_status": 422,
         "expected_error_code": null,
         "sample_payload": null,
+        "path_params": {
+          "user_id": "abc"
+        },
         "source": "rule",
         "selected": true
       },
@@ -118,6 +150,9 @@
         "expected_status": 403,
         "expected_error_code": "FORBIDDEN",
         "sample_payload": null,
+        "path_params": {
+          "user_id": 2
+        },
         "source": "llm",
         "selected": true
       }

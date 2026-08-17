@@ -30,15 +30,41 @@ def _class_name(feature_name: str) -> str:
     return "".join(part.capitalize() for part in feature_name.split("_"))
 
 
+def _resolve_endpoint(endpoint: str, path_params: dict[str, Any] | None) -> str:
+    """Fill an endpoint's {placeholders} using the case's path_params.
+
+    Endpoints with no {placeholder} (or cases with no path_params) are
+    returned unchanged. Raises KeyError if the matrix is inconsistent
+    (endpoint has a placeholder with no matching path_params entry) —
+    this is intentional: a silently-wrong URL in generated test code
+    is worse than a loud failure at generation time.
+    """
+    if not path_params:
+        return endpoint
+    return endpoint.format(**path_params)
+
+
 def _prepare_features(matrix: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Filter to selected cases and attach a render-friendly class_name.
+    """Filter to selected cases and attach render-friendly fields.
 
     Features with no selected cases are dropped entirely so we don't
-    emit an empty test class.
+    emit an empty test class. Each case gets a `resolved_endpoint`
+    (path_params substituted in) and a `class_name` is attached to the
+    feature so the template doesn't need to do any string manipulation.
     """
     prepared = []
     for feature in matrix:
-        selected_cases = [c for c in feature["cases"] if c["selected"]]
+        selected_cases = []
+        for case in feature["cases"]:
+            if not case["selected"]:
+                continue
+            resolved_case = {
+                **case,
+                "resolved_endpoint": _resolve_endpoint(
+                    feature["endpoint"], case.get("path_params")
+                ),
+            }
+            selected_cases.append(resolved_case)
         if not selected_cases:
             continue
         prepared.append(

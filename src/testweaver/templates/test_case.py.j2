@@ -16,10 +16,10 @@ class Test{{ feature.class_name }}:
         """[{{ case.category }}] {{ case.description }}"""
 {% if case.sample_payload is not none %}
         response = client.{{ feature.method | lower }}(
-            "{{ feature.endpoint }}", json={{ case.sample_payload }}
+            "{{ case.resolved_endpoint }}", json={{ case.sample_payload }}
         )
 {% else %}
-        response = client.{{ feature.method | lower }}("{{ feature.endpoint }}")
+        response = client.{{ feature.method | lower }}("{{ case.resolved_endpoint }}")
 {% endif %}
 {% if case.expected_status is not none %}
         assert response.status_code == {{ case.expected_status }}
