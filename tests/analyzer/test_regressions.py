@@ -1,6 +1,6 @@
 """실제 프로젝트에서 조용히 잘못된 결과를 만들었던 조합의 회귀 테스트."""
 
-from testweaver.analyzer.models import DependencyOrigin
+from testweaver.analyzer.models import DependencyOrigin, NoteCode
 from testweaver.analyzer.pipeline import analyze_project
 
 
@@ -267,3 +267,53 @@ def clean():
     assert feature.endpoint.exceptions == []
     assert feature.endpoint.calls_external == []
     assert feature.endpoint.nondeterministic == []
+
+def test_unmounted_router_is_not_reported_as_an_endpoint(tmp_path):
+    _write(
+        tmp_path,
+        "main.py",
+        """
+from fastapi import APIRouter, FastAPI
+
+app = FastAPI()
+mounted = APIRouter(prefix='/mounted')
+orphan = APIRouter(prefix='/orphan')
+
+@mounted.get('/hello')
+def mounted_hello(): pass
+
+@orphan.get('/hidden')
+def orphan_hidden(): pass
+
+app.include_router(mounted)
+""",
+    )
+
+    assert [feature.id for feature in analyze_project(tmp_path).features] == [
+        "GET /mounted/hello"
+    ]
+
+
+def test_non_fastapi_add_route_does_not_emit_dynamic_route_note(tmp_path):
+    _write(
+        tmp_path,
+        "main.py",
+        """
+from fastapi import FastAPI
+
+class Registry:
+    def add_route(self, path): pass
+
+registry = Registry()
+registry.add_route('/not-a-fastapi-route')
+
+app = FastAPI()
+
+@app.get('/health')
+def health(): pass
+""",
+    )
+
+    result = analyze_project(tmp_path)
+    assert [feature.id for feature in result.features] == ["GET /health"]
+    assert not result.notes_with(NoteCode.DYNAMIC_ROUTE)
