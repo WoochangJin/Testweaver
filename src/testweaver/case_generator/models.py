@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+
 class TestCaseCategory(str, Enum):
     NORMAL = "normal"
     FAILURE = "failure"

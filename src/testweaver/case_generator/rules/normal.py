@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from testweaver.analyzer.models import Feature
-from testweaver.case_generator.payload import build_valid_payload
 from testweaver.case_generator.models import TestCase, TestCaseCategory
-
+from testweaver.case_generator.payload import build_valid_payload
 
 
 def derive_normal_cases(feature: Feature) -> list[TestCase]:
