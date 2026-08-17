@@ -17,4 +17,9 @@ def build_case_matrix(feature: Feature) -> TestCaseMatrix:
         *derive_boundary_cases(feature),
         *derive_security_cases(feature),
     ]
-    return TestCaseMatrix(feature_name=feature.name, cases=cases)
+    return TestCaseMatrix(
+        feature_name=feature.name,
+        endpoint=feature.endpoint.path,
+        method=feature.endpoint.method.value,
+        cases=cases,
+    )

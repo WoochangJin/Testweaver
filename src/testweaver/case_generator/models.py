@@ -31,4 +31,4 @@ class TestCaseMatrix:
         return [case for case in self.cases if case.category == category]
 
     def selected_cases(self) -> list[TestCase]:
-        return [case for case in self.cases if case.selected]
+        return [case for case in self.cases if case.selected] 

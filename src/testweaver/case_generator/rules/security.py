@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-
 from testweaver.analyzer.models import Feature
 from testweaver.case_generator.models import TestCase, TestCaseCategory
+from testweaver.case_generator.payload import build_valid_payload
 
 
 def derive_security_cases(feature: Feature) -> list[TestCase]:
@@ -15,5 +15,6 @@ def derive_security_cases(feature: Feature) -> list[TestCase]:
             category=TestCaseCategory.SECURITY,
             description="인증 정보 없이 보호된 엔드포인트에 접근한다.",
             expected_status=401,
+            sample_payload=build_valid_payload(feature.constraints),
         )
     ]
