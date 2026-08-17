@@ -58,6 +58,17 @@
         "sample_payload": {"email": "withdrawn@example.com", "password": "any"},
         "source": "rule",
         "selected": false
+      },
+      {
+        "id": "login-006",
+        "feature_name": "login",
+        "category": "failure",
+        "description": "잠긴 계정으로 로그인 시도 (예외 처리 흐름 미확정 - status_code 추출 실패, selected: true로 skip 로직 검증용)",
+        "expected_status": null,
+        "expected_error_code": null,
+        "sample_payload": {"email": "locked@example.com", "password": "any"},
+        "source": "rule",
+        "selected": true
       }
     ]
   },
