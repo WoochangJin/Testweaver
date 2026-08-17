@@ -2,7 +2,8 @@ from pathlib import Path
 
 from testweaver.grouping import group_cases_by_category
 from testweaver.loader import load_matrices
-from testweaver.schema import CaseCategory, CaseSource, TestCase as SchemaTestCase
+from testweaver.schema import CaseCategory, CaseSource
+from testweaver.schema import TestCase as SchemaTestCase
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "mock_matrix.json"
 
