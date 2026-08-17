@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from testweaver_demo_app.main import app, get_db
+from tests.fixtures.demo_app.main import app, get_db
 
 
 @pytest.fixture
