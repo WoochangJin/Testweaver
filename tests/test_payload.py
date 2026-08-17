@@ -7,12 +7,13 @@ def _constraints():
         Constraint(field_name="email", type_name="str", required=True, pattern="email"),
         Constraint(field_name="password", type_name="str", required=True, min_length=8),
         Constraint(field_name="age", type_name="int", required=True, ge=0, le=120),
+        Constraint(field_name="role", type_name="str", required=True, allowed_values=["admin", "user", "guest"]),
     ]
 
 
 def test_build_valid_payload_fills_every_field():
     payload = build_valid_payload(_constraints())
-    assert set(payload.keys()) == {"email", "password", "age"}
+    assert set(payload.keys()) == {"email", "password", "age", "role"}
 
 
 def test_build_valid_payload_email_pattern_uses_valid_email():
@@ -57,5 +58,21 @@ def test_build_invalid_payload_above_le_breaks_upper_bound():
 
 def test_build_invalid_payload_only_breaks_target_field():
     payload = build_invalid_payload(_constraints(), "password", "below_min_length")
+    assert payload["email"] == "user@example.com"
+    assert payload["age"] == 0
+
+def test_build_valid_payload_allowed_values_uses_first_option():
+    payload = build_valid_payload(_constraints())
+    assert payload["role"] == "admin"
+    assert payload["role"] in {"admin", "user", "guest"}
+
+
+def test_build_invalid_payload_invalid_choice_breaks_allowed_values():
+    payload = build_invalid_payload(_constraints(), "role", "invalid_choice")
+    assert payload["role"] not in {"admin", "user", "guest"}
+
+
+def test_build_invalid_payload_invalid_choice_only_breaks_target_field():
+    payload = build_invalid_payload(_constraints(), "role", "invalid_choice")
     assert payload["email"] == "user@example.com"
     assert payload["age"] == 0

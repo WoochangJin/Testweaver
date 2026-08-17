@@ -2,6 +2,8 @@ from testweaver.analyzer.models import Constraint
 
 
 def _valid_value(constraint: Constraint):
+    if constraint.allowed_values:
+        return constraint.allowed_values[0]
     if constraint.pattern == "email":
         return "user@example.com"
     if constraint.min_length is not None:
@@ -22,9 +24,11 @@ def build_invalid_payload(constraints: list[Constraint], field_name: str, varian
     if variant == "missing":
         payload.pop(field_name, None)
     elif variant == "below_min_length":
-        payload[field_name] = "a"
+        constraint = next(c for c in constraints if c.field_name == field_name)
+        payload[field_name] = "a" * max(constraint.min_length - 1, 0)
     elif variant == "above_max_length":
-        payload[field_name] = "a" * 1000
+        constraint = next(c for c in constraints if c.field_name == field_name)
+        payload[field_name] = "a" * (constraint.max_length + 1)
     elif variant == "pattern_mismatch":
         payload[field_name] = "invalid-format"
     elif variant == "below_ge":
@@ -33,4 +37,6 @@ def build_invalid_payload(constraints: list[Constraint], field_name: str, varian
     elif variant == "above_le":
         constraint = next(c for c in constraints if c.field_name == field_name)
         payload[field_name] = constraint.le + 1
+    elif variant == "invalid_choice":
+        payload[field_name] = "__not_in_allowed_values__"
     return payload

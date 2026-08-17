@@ -20,6 +20,8 @@ def derive_boundary_cases(feature: Feature) -> list[TestCase]:
             cases.append(_case(feature, constraint.field_name, "above_le", f"{constraint.field_name}이(가) 최대값({constraint.le}) 초과"))
         if constraint.pattern is not None:
             cases.append(_case(feature, constraint.field_name, "pattern_mismatch", f"{constraint.field_name} 형식 오류"))
+        if constraint.allowed_values is not None:
+            cases.append(_case(feature, constraint.field_name, "invalid_choice", f"{constraint.field_name}이(가) 허용되지 않은 값"))
     return cases
 
 
