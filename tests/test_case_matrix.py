@@ -1,4 +1,10 @@
-from testweaver.analyzer.models import Constraint, Endpoint, ExceptionFlow, Feature, HttpMethod
+from testweaver.analyzer.models import (
+    Constraint,
+    Endpoint,
+    ExceptionFlow,
+    Feature,
+    HttpMethod,
+)
 from testweaver.case_generator.rules import (
     derive_boundary_cases,
     derive_failure_cases,
