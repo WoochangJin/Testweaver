@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from tests.fixtures.demo_app.main import app, get_db
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def fresh_db() -> dict[str, dict[str, Any]]:
     """A fresh in-memory user store for every test.
 
@@ -33,13 +33,19 @@ def fresh_db() -> dict[str, dict[str, Any]]:
     }
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def client(fresh_db: dict[str, dict[str, Any]]) -> Iterator[TestClient]:
     """FastAPI TestClient with the DB dependency overridden.
 
     This is the fixture name every generated test expects. Swapping
     `get_db` here is the whole trick: the app under test never touches
     a real database during the generated test run.
+
+    scope="function" (explicit, matches fresh_db): each test gets its
+    own TestClient tied to its own fresh_db. A session-scoped client
+    would be faster, but would let dependency_overrides or DB state
+    from one test leak into the next — not acceptable for generated
+    tests that are meant to run independently and in any order.
     """
     app.dependency_overrides[get_db] = lambda: fresh_db
     with TestClient(app) as test_client:
