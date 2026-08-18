@@ -79,3 +79,27 @@ def get_user_profile(user_id: str, db: dict = Depends(get_db)) -> dict:
             detail={"error_code": "USER_NOT_FOUND"},
         )
     return {"id": user["id"], "email": user["email"]}
+
+
+@app.put("/api/users/{user_id}")
+def update_user_profile(
+    user_id: str, payload: dict[str, str], db: dict = Depends(get_db)
+) -> dict:
+    user = db.get(user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "USER_NOT_FOUND"},
+        )
+    user["email"] = payload.get("email", user["email"])
+    return {"id": user["id"], "email": user["email"]}
+
+
+@app.delete("/api/users/{user_id}", status_code=204)
+def delete_account(user_id: str, db: dict = Depends(get_db)) -> None:
+    if user_id not in db:
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "USER_NOT_FOUND"},
+        )
+    del db[user_id]
