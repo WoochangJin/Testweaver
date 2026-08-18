@@ -15,7 +15,7 @@ from testweaver.case_generator.rules import (
 
 def _mock_feature(**overrides) -> Feature:
     endpoint = Endpoint(
-        path="/users",
+        path=overrides.get("path", "/users"),
         method=HttpMethod.POST,
         handler_name="register",
         requires_auth=overrides.get("requires_auth", False),
@@ -33,6 +33,12 @@ def test_derive_normal_cases_returns_one_case():
     cases = derive_normal_cases(feature)
     assert len(cases) == 1
     assert cases[0].expected_status == 200
+
+
+def test_derive_normal_cases_extracts_path_params():
+    feature = _mock_feature(path="/users/{user_id}")
+    cases = derive_normal_cases(feature)
+    assert cases[0].path_params == {"user_id": 1}
 
 
 def test_derive_boundary_cases_covers_each_constraint_rule():

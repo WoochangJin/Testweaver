@@ -1,3 +1,5 @@
+import re
+
 from testweaver.analyzer.models import Constraint
 
 
@@ -40,3 +42,7 @@ def build_invalid_payload(constraints: list[Constraint], field_name: str, varian
     elif variant == "invalid_choice":
         payload[field_name] = "__not_in_allowed_values__"
     return payload
+
+def build_path_params(path: str) -> dict | None:
+    names = re.findall(r"\{(\w+)\}", path)
+    return {name: 1 for name in names} or None

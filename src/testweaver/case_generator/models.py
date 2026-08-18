@@ -22,6 +22,7 @@ class TestCase:
     source: str = "rule"  #"rule" | "llm"
     selected: bool = False
     sample_payload: dict | None = None
+    path_params: dict | None = None
 
 
 @dataclass
