@@ -20,7 +20,7 @@ def test_write_matrices_round_trips_with_loader(tmp_path):
 def test_write_matrices_persists_selection_updates(tmp_path):
     matrices = load_matrices(FIXTURE_PATH)
     login = matrices[0]
-    updated_login = select_cases(login, {4, 5})  # login-005, login-004
+    updated_login = select_cases(login, {4, 6})  # login-005, login-004
     matrices[0] = updated_login
     out_path = tmp_path / "matrix.json"
 

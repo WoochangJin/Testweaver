@@ -42,4 +42,4 @@ def test_group_cases_by_category_matches_fixture_coverage():
     login = matrices[0]
     grouped = group_cases_by_category(login.cases)
     assert len(grouped[CaseCategory.NORMAL]) == 1
-    assert len(grouped[CaseCategory.FAILURE]) ==  2 # login-002, login-005
+    assert len(grouped[CaseCategory.FAILURE]) == 3  # login-002, login-005, login-006

@@ -39,8 +39,8 @@ def test_parse_selection_rejects_zero_or_negative():
 def test_select_cases_marks_only_the_chosen_rows_selected():
     matrices = load_matrices(FIXTURE_PATH)
     login = matrices[0]
-    # render order: login-001(1) login-003(2) login-002(3) login-005(4) login-004(5)
-    updated = select_cases(login, {4, 5})
+    # render order: login-001(1) login-003(2) login-002(3) login-005(4) login-006(5) login-004(6)
+    updated = select_cases(login, {4, 6})
 
     by_id = {case.id: case.selected for case in updated.cases}
     assert by_id["login-005"] is True

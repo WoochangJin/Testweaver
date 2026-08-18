@@ -27,6 +27,7 @@ class TestCase(BaseModel):
     expected_status: int | None = None
     expected_error_code: str | None = None
     sample_payload: dict | None = None
+    path_params: dict | None = None
     source: CaseSource
     selected: bool = False
 

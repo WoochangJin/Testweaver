@@ -46,8 +46,8 @@ def test_render_matrix_numbers_cases_continuously_across_categories():
     assert row_number(login_output, "login-001") == "1"  # normal
     assert row_number(login_output, "login-003") == "2"  # boundary
     assert row_number(login_output, "login-002") == "3"  # failure
-    assert row_number(login_output, "login-005") == "4"  # failure
-    assert row_number(login_output, "login-004") == "5"  # security
+    assert row_number(login_output, "login-006") == "5"  # failure
+    assert row_number(login_output, "login-004") == "6"  # security
 
     profile_console = Console(record=True, width=120)
     render_matrix(matrices[1], profile_console)
