@@ -53,3 +53,12 @@ def test_render_matrix_numbers_cases_continuously_across_categories():
     render_matrix(matrices[1], profile_console)
     profile_output = profile_console.export_text()
     assert row_number(profile_output, "profile-001") == "1"  # numbering resets per matrix
+
+
+def test_render_matrix_shows_path_params():
+    matrices = load_matrices(FIXTURE_PATH)
+    profile = matrices[1]
+    console = Console(record=True, width=120)
+    render_matrix(profile, console)
+    output = console.export_text()
+    assert "'user_id': 1" in output

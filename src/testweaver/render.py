@@ -13,6 +13,7 @@ def _build_category_table(category: CaseCategory, cases: list[TestCase], start_i
     table.add_column("#", width=3)
     table.add_column("ID")
     table.add_column("Description")
+    table.add_column("Path Params")
     table.add_column("Expected Status")
     table.add_column("Source")
     table.add_column("Selected")
@@ -21,6 +22,7 @@ def _build_category_table(category: CaseCategory, cases: list[TestCase], start_i
             str(start_index + offset),
             case.id,
             case.description,
+            str(case.path_params) if case.path_params else "-",
             str(case.expected_status) if case.expected_status is not None else "-",
             case.source.value,
             "yes" if case.selected else "no",
