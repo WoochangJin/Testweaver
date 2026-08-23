@@ -18,3 +18,25 @@ htmlcov/
 
 # TestWeaver 분석 산출물
 .testweaver/
+# 환경 변수
+.env
+
+# 가상환경
+venv/
+.venv/
+
+# 생성기 출력 (커밋 대상 아님, 로컬에서 재생성)
+tests/generated/
+
+# 파이썬 캐시
+__pycache__/
+*.pyc
+
+# 테스트/린트 캐시
+.pytest_cache/
+.ruff_cache/
+
+# 빌드 산출물
+dist/
+build/
+*.egg-info/

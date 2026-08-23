@@ -9,7 +9,9 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.140.13",
+    "httpx2>=2.10.0",
     "jinja2>=3.1.6",
+    "pydantic>=2.13.4",
     "rich>=15.0.0",
     "typer>=0.27.0",
 ]
@@ -42,3 +44,5 @@ filterwarnings = [
     # 두 오퍼레이션이 되므로 FastAPI 가 중복 ID 를 경고하지만 의도된 형태다.
     "ignore:Duplicate Operation ID:UserWarning",
 ]
+[tool.ruff.lint]
+ignore = ["B008"]
