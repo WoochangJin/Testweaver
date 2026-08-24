@@ -1,5 +1,5 @@
 from testweaver.analyzer.models import Endpoint, Feature, HttpMethod
-from testweaver.pipeline import build_matrices, generate_pytest_module
+from testweaver.pipeline import build_matrices, generate_pytest_module, run_tests
 from testweaver.schema import CaseCategory, CaseSource
 
 
@@ -38,3 +38,19 @@ def test_generate_pytest_module_renders_only_selected_cases():
 
     assert "import pytest" in module
     assert "class TestRegister" in module
+
+
+def test_run_tests_returns_pytest_exit_code(tmp_path):
+    (tmp_path / "test_pipeline_pass.py").write_text(
+        "def test_ok():\n    assert True\n", encoding="utf-8"
+    )
+
+    assert run_tests(tmp_path) == 0
+
+
+def test_run_tests_propagates_failure_exit_code(tmp_path):
+    (tmp_path / "test_pipeline_fail.py").write_text(
+        "def test_fail():\n    assert False\n", encoding="utf-8"
+    )
+
+    assert run_tests(tmp_path) == 1

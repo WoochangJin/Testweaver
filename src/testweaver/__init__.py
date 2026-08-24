@@ -69,6 +69,17 @@ def generate(
     console.print(f"[green]Wrote generated tests to {output}[/green]")
 
 
+@app.command()
+def test(
+    path: Annotated[
+        Path, typer.Argument(help="Path to run pytest against.")
+    ] = Path("tests/generated"),
+) -> None:
+    """Run pytest in-process against generated tests."""
+    exit_code = pipeline.run_tests(path)
+    raise typer.Exit(code=exit_code)
+
+
 def main() -> None:
     app()
 

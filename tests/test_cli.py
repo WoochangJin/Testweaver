@@ -66,3 +66,32 @@ def test_generate_reprompts_on_invalid_input(tmp_path):
 
     assert result.exit_code == 0, result.output
     assert "Invalid selection" in result.output
+
+
+def test_test_command_passes_when_pytest_succeeds(tmp_path):
+    (tmp_path / "test_cli_pass.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["test", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+
+
+def test_test_command_propagates_pytest_failure(tmp_path):
+    (tmp_path / "test_cli_fail.py").write_text("def test_fail():\n    assert False\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["test", str(tmp_path)])
+
+    assert result.exit_code == 1
+
+
+def test_test_command_defaults_to_generated_tests_dir(tmp_path, monkeypatch):
+    generated_dir = tmp_path / "tests" / "generated"
+    generated_dir.mkdir(parents=True)
+    (generated_dir / "test_cli_default.py").write_text(
+        "def test_ok():\n    assert True\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["test"])
+
+    assert result.exit_code == 0, result.output

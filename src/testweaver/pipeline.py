@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from testweaver.analyzer.models import AnalysisResult, Feature
 from testweaver.analyzer.pipeline import analyze_project
 from testweaver.case_generator.matrix import build_case_matrix
@@ -67,3 +69,8 @@ def generate_pytest_module(matrices: list[TestCaseMatrix]) -> str:
     """Render a pytest module from whichever cases are marked selected."""
     payload = [matrix.model_dump(mode="json") for matrix in matrices]
     return generate_test_module(payload)
+
+
+def run_tests(path: Path) -> int:
+    """Run pytest in-process against the given path and return its exit code."""
+    return int(pytest.main([str(path)]))
