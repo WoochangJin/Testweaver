@@ -29,20 +29,5 @@ dev = [
     "ruff>=0.16.0",
 ]
 
-[tool.ruff.lint.per-file-ignores]
-# 픽스처 앱은 분석 대상이라 일부러 구식·비관용 문법을 담는다.
-# 실제 프로젝트에 그런 코드가 있고, 그걸 읽어 내는 게 analyzer 의 일이다.
-"tests/fixtures/**" = ["UP046", "UP047"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-markers = [
-    "parity: OpenAPI 스펙과의 대조 (보조 검증). `-m 'not parity'` 로 제외 가능",
-]
-filterwarnings = [
-    # edge_app 은 api_route(methods=[GET, POST]) 를 일부러 쓴다. 한 함수가
-    # 두 오퍼레이션이 되므로 FastAPI 가 중복 ID 를 경고하지만 의도된 형태다.
-    "ignore:Duplicate Operation ID:UserWarning",
-]
 [tool.ruff.lint]
 ignore = ["B008"]
