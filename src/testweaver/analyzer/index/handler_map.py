@@ -14,6 +14,7 @@ import ast
 from testweaver.analyzer.ast_utils import (
     argument_of,
     attribute_or_name,
+    iter_runtime_nodes,
     keyword_of,
     resolve_status_constant,
     split_attribute_call,
@@ -32,8 +33,8 @@ def index_exception_handlers(
 ) -> dict[SymbolRef, int]:
     """`@app.exception_handler(Exc)` 를 찾아 예외별 상태코드를 모은다.
 
-    핸들러 본문에서 첫 번째로 해석되는 `status_code=` 를 그 예외의 상태코드로
-    본다. 대부분의 핸들러는 응답을 하나만 만든다.
+    핸들러 본문에서 `return` 되는 응답의 `status_code=` 를 그 예외의
+    상태코드로 본다. 대부분의 핸들러는 응답을 하나만 만든다.
     """
     mapping: dict[SymbolRef, int] = {}
 
@@ -86,8 +87,43 @@ def _exception_ref(
 
 
 def _status_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> int | None:
-    """본문에서 `status_code=` 로 넘어가는 첫 상태코드를 찾는다."""
-    for node in ast.walk(fn):
+    """`return` 되는 응답의 `status_code=` 를 찾는다.
+
+    `ast.walk(fn)`으로 본문 전체를 훑으면 로깅 호출처럼 실제 응답과 무관한
+    `status_code=` 를 먼저 주워버릴 수 있고, 실행되지 않는 중첩 함수 본문까지
+    내려가 버린다 (`iter_runtime_nodes` 의 docstring 참고). 그래서 `return`
+    표현식으로 범위를 좁힌다.
+
+    `return resp` 처럼 변수를 그대로 반환하는 핸들러도 있으므로, 대입식까지
+    한 겹 역추적한다 (재대입되면 return 시점에 유효한 마지막 값을 쓴다).
+    """
+    last_assign: dict[str, ast.expr] = {}
+    for node in iter_runtime_nodes(fn):
+        if isinstance(node, ast.Assign | ast.AnnAssign) and node.value is not None:
+            for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
+                if isinstance(target, ast.Name):
+                    last_assign[target.id] = node.value
+            continue
+
+        if not isinstance(node, ast.Return) or node.value is None:
+            continue
+
+        status = _status_in_expr(node.value)
+        if status is not None:
+            return status
+
+        if isinstance(node.value, ast.Name):
+            source = last_assign.get(node.value.id)
+            if source is not None:
+                status = _status_in_expr(source)
+                if status is not None:
+                    return status
+
+    return None
+
+
+def _status_in_expr(expr: ast.expr) -> int | None:
+    for node in ast.walk(expr):
         if not isinstance(node, ast.Call):
             continue
         argument = keyword_of(node, "status_code")
