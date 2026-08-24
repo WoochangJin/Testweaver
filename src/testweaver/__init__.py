@@ -80,6 +80,36 @@ def test(
     raise typer.Exit(code=exit_code)
 
 
+@app.command()
+def run(
+    project_root: Annotated[Path, typer.Argument(help="Path to the FastAPI project to analyze.")],
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Where to write the generated pytest module.")
+    ] = Path("tests/generated/test_generated.py"),
+) -> None:
+    """Analyze, generate, and run pytest end-to-end without intermediate files."""
+    console = Console()
+    result = pipeline.analyze(project_root)
+
+    for note in result.notes:
+        style = "red" if note.level is NoteLevel.ERROR else "yellow"
+        console.print(f"[{style}]{note}[/{style}]")
+
+    if result.has_errors:
+        raise typer.Exit(code=1)
+
+    matrices = pipeline.build_matrices(result.features)
+    selected = [_select_matrix_interactively(matrix, console) for matrix in matrices]
+
+    code = pipeline.generate_pytest_module(selected)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(code, encoding="utf-8")
+    console.print(f"[green]Wrote generated tests to {output}[/green]")
+
+    exit_code = pipeline.run_tests(output)
+    raise typer.Exit(code=exit_code)
+
+
 def main() -> None:
     app()
 

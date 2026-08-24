@@ -95,3 +95,28 @@ def test_test_command_defaults_to_generated_tests_dir(tmp_path, monkeypatch):
     result = runner.invoke(app, ["test"])
 
     assert result.exit_code == 0, result.output
+
+
+def test_run_executes_full_pipeline(tmp_path):
+    output_path = tmp_path / "test_generated.py"
+    result = runner.invoke(
+        app,
+        ["run", str(DEMO_APP_ROOT), "--output", str(output_path)],
+        input="1\n" * 20,  # demo_app 케이스 수만큼 첫 케이스 선택
+    )
+
+    assert result.exit_code == 0, result.output
+    assert output_path.exists()
+
+
+def test_run_exits_before_generate_on_analysis_error(tmp_path, monkeypatch):
+    fake_result = AnalysisResult(
+        notes=[AnalysisNote(level=NoteLevel.ERROR, code=NoteCode.PARSE_FAILED, message="boom")],
+    )
+    monkeypatch.setattr(pipeline, "analyze", lambda project_root: fake_result)
+
+    output_path = tmp_path / "test_generated.py"
+    result = runner.invoke(app, ["run", str(DEMO_APP_ROOT), "--output", str(output_path)])
+
+    assert result.exit_code == 1
+    assert not output_path.exists()
