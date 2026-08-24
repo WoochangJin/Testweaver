@@ -6,6 +6,8 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
+from testweaver import pipeline
+from testweaver.analyzer.models import NoteLevel
 from testweaver.loader import load_matrices
 from testweaver.render import render_matrix
 from testweaver.schema import TestCaseMatrix
@@ -24,6 +26,29 @@ def _select_matrix_interactively(matrix: TestCaseMatrix, console: Console) -> Te
             return select_cases(matrix, indices)
         except ValueError as exc:
             typer.echo(f"Invalid selection: {exc}", err=True)
+
+
+@app.command()
+def analyze(
+    project_root: Annotated[Path, typer.Argument(help="Path to the FastAPI project to analyze.")],
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Where to write the test case matrix.")
+    ] = Path("matrix.json"),
+) -> None:
+    """Statically analyze a FastAPI project and write a test case matrix."""
+    console = Console()
+    result = pipeline.analyze(project_root)
+
+    for note in result.notes:
+        style = "red" if note.level is NoteLevel.ERROR else "yellow"
+        console.print(f"[{style}]{note}[/{style}]")
+
+    matrices = pipeline.build_matrices(result.features)
+    write_matrices(matrices, output)
+    console.print(f"[green]Wrote {len(matrices)} matrices to {output}[/green]")
+
+    if result.has_errors:
+        raise typer.Exit(code=1)
 
 
 @app.command()
