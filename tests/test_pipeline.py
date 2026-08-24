@@ -54,3 +54,11 @@ def test_run_tests_propagates_failure_exit_code(tmp_path):
     )
 
     assert run_tests(tmp_path) == 1
+    
+
+def test_build_matrices_sanitizes_case_generator_ids_into_valid_identifiers():
+    matrices = build_matrices([_mock_feature()])
+
+    for case in matrices[0].cases:
+        assert "::" not in case.id
+        assert case.id.replace("_", "").isalnum()

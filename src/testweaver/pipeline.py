@@ -7,6 +7,7 @@ these functions and each step stays testable without invoking Typer.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -25,22 +26,41 @@ def analyze(project_root: Path) -> AnalysisResult:
     return analyze_project(project_root)
 
 
-def _to_contract_case(case: CaseGenTestCase) -> TestCase:
+_NON_IDENTIFIER_RUN = re.compile(r"[^0-9a-zA-Z_]+")
+_BODYLESS_METHODS = frozenset({"GET", "DELETE", "HEAD", "OPTIONS"})
+
+
+def _to_contract_case(case: CaseGenTestCase, method: str) -> TestCase:
     """Convert a case_generator dataclass case into the schema.py contract.
 
     Temporary bridge: case_generator currently builds its own dataclass
     models (testweaver.case_generator.models) instead of the pydantic
     contract in testweaver.schema. Delete this function (and
     _to_contract_matrix) once case_generator builds schema.TestCase directly.
+
+    case_generator's ids use "::" as a hierarchy separator (e.g.
+    "login::normal::valid_input"), which generator.py turns into a pytest
+    function name and isn't a valid identifier fragment. Normalized here
+    so generator.py doesn't need to change; once case_generator emits
+    schema.TestCase directly, id generation should produce
+    identifier-safe ids up front and this normalization goes with it.
+
+    case_generator also fills sample_payload regardless of HTTP method,
+    but httpx's TestClient.get()/delete()/head()/options() don't accept a
+    json body argument. Dropped here for bodyless methods so generator.py's
+    template doesn't try to pass json= where the method can't take it.
     """
+    sample_payload = case.sample_payload
+    if method.upper() in _BODYLESS_METHODS:
+        sample_payload = None
     return TestCase(
-        id=case.id,
+        id=_NON_IDENTIFIER_RUN.sub("_", case.id).strip("_"),
         feature_name=case.feature_name,
         category=CaseCategory(case.category.value),
         description=case.description,
         expected_status=case.expected_status,
         expected_error_code=case.expected_error_code,
-        sample_payload=case.sample_payload,
+        sample_payload=sample_payload,
         path_params=case.path_params,
         source=CaseSource(case.source),
         selected=case.selected,
@@ -56,7 +76,7 @@ def _to_contract_matrix(matrix: CaseGenMatrix) -> TestCaseMatrix:
         feature_name=matrix.feature_name,
         endpoint=matrix.endpoint,
         method=matrix.method,
-        cases=[_to_contract_case(case) for case in matrix.cases],
+        cases=[_to_contract_case(case, matrix.method) for case in matrix.cases],
     )
 
 
