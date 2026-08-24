@@ -40,6 +40,7 @@ def test_generated_pytest_file_passes(matrix_file):
         [sys.executable, "-m", "pytest", str(output_path), "-v"],
         capture_output=True,
         text=True,
+        check=False,
         cwd=Path(__file__).parent.parent,
     )
 
