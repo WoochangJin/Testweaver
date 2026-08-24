@@ -68,14 +68,42 @@ def login(payload: dict[str, str], db: dict = Depends(get_db)) -> dict:
     return {"access_token": "fake-token"}
 
 
+_CURRENT_USER_ID = "1"  # NOTE: this stub has no real auth/token mechanism —
+                          # see login() which issues a static "fake-token" that
+                          # nothing verifies. "current user" is hardcoded here
+                          # to satisfy profile-001/004 in mock_matrix.json.
+
 @app.get("/api/users/{user_id}")
 def get_user_profile(user_id: str, db: dict = Depends(get_db)) -> dict:
     if not user_id.isdigit():
         raise HTTPException(status_code=422, detail="invalid user_id")
     user = db.get(user_id)
     if user is None:
+        raise HTTPException(status_code=404, detail={"error_code": "USER_NOT_FOUND"})
+    if user_id != _CURRENT_USER_ID:
+        raise HTTPException(status_code=403, detail={"error_code": "FORBIDDEN"})
+    return {"id": user["id"], "email": user["email"]}
+
+
+@app.put("/api/users/{user_id}")
+def update_user_profile(
+    user_id: str, payload: dict[str, str], db: dict = Depends(get_db)
+) -> dict:
+    user = db.get(user_id)
+    if user is None:
         raise HTTPException(
             status_code=404,
             detail={"error_code": "USER_NOT_FOUND"},
         )
+    user["email"] = payload.get("email", user["email"])
     return {"id": user["id"], "email": user["email"]}
+
+
+@app.delete("/api/users/{user_id}", status_code=204)
+def delete_account(user_id: str, db: dict = Depends(get_db)) -> None:
+    if user_id not in db:
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "USER_NOT_FOUND"},
+        )
+    del db[user_id]
