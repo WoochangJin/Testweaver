@@ -1,3 +1,23 @@
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# 가상환경
+.venv/
+
+# 테스트 · 린트 캐시
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# TestWeaver 분석 산출물
+.testweaver/
 # 환경 변수
 .env
 
