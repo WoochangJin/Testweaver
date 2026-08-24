@@ -317,3 +317,44 @@ def health(): pass
     result = analyze_project(tmp_path)
     assert [feature.id for feature in result.features] == ["GET /health"]
     assert not result.notes_with(NoteCode.DYNAMIC_ROUTE)
+
+def test_exception_handler_uses_status_from_returned_response(tmp_path):
+    """보조 함수의 status_code가 아니라 실제 반환 응답의 값을 사용한다."""
+    _write(
+        tmp_path,
+        "main.py",
+        """
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+app = FastAPI()
+
+
+class SampleError(Exception):
+    pass
+
+
+def record_event(*, status_code):
+    pass
+
+
+@app.exception_handler(SampleError)
+def handle_sample_error(request, exc):
+    record_event(status_code=500)
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "not found"},
+    )
+
+
+@app.get("/sample")
+def sample():
+    raise SampleError()
+""",
+    )
+
+    [feature] = analyze_project(tmp_path).features
+    [exception] = feature.endpoint.exceptions
+
+    assert exception.exception_type == "SampleError"
+    assert exception.status_code == 404

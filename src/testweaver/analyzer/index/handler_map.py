@@ -85,17 +85,26 @@ def _exception_ref(
     return None
 
 
-def _status_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> int | None:
-    """본문에서 `status_code=` 로 넘어가는 첫 상태코드를 찾는다."""
+def _status_in_body(
+    fn: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> int | None:
+    """핸들러가 실제로 반환하는 응답에서 상태코드를 찾는다."""
     for node in ast.walk(fn):
-        if not isinstance(node, ast.Call):
+        if not isinstance(node, ast.Return) or node.value is None:
             continue
-        argument = keyword_of(node, "status_code")
-        if argument is None:
-            continue
-        status = resolve_status_constant(argument)
-        if status is not None:
-            return status
+
+        for returned_node in ast.walk(node.value):
+            if not isinstance(returned_node, ast.Call):
+                continue
+
+            argument = keyword_of(returned_node, "status_code")
+            if argument is None:
+                continue
+
+            status = resolve_status_constant(argument)
+            if status is not None:
+                return status
+
     return None
 
 
