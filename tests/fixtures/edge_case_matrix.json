@@ -1,0 +1,76 @@
+[
+  {
+    "feature_name": "update_user_profile",
+    "endpoint": "/api/users/{user_id}",
+    "method": "PUT",
+    "cases": [
+      {
+        "id": "update-001",
+        "feature_name": "update_user_profile",
+        "category": "normal",
+        "description": "본인 프로필 이메일 정상 수정",
+        "expected_status": 200,
+        "expected_error_code": null,
+        "sample_payload": {
+          "email": "updated@example.com"
+        },
+        "path_params": {
+          "user_id": 1
+        },
+        "source": "rule",
+        "selected": true
+      },
+      {
+        "id": "update-002",
+        "feature_name": "update_user_profile",
+        "category": "failure",
+        "description": "존재하지 않는 user_id 수정 시도",
+        "expected_status": 404,
+        "expected_error_code": "USER_NOT_FOUND",
+        "sample_payload": {
+          "email": "ghost@example.com"
+        },
+        "path_params": {
+          "user_id": 9999
+        },
+        "source": "rule",
+        "selected": true
+      }
+    ]
+  },
+  {
+    "feature_name": "delete_account",
+    "endpoint": "/api/users/{user_id}",
+    "method": "DELETE",
+    "cases": [
+      {
+        "id": "delete-001",
+        "feature_name": "delete_account",
+        "category": "normal",
+        "description": "본인 계정 정상 삭제 (body 없음)",
+        "expected_status": 204,
+        "expected_error_code": null,
+        "sample_payload": null,
+        "path_params": {
+          "user_id": 1
+        },
+        "source": "rule",
+        "selected": true
+      },
+      {
+        "id": "delete-002",
+        "feature_name": "delete_account",
+        "category": "failure",
+        "description": "존재하지 않는 user_id 삭제 시도",
+        "expected_status": 404,
+        "expected_error_code": "USER_NOT_FOUND",
+        "sample_payload": null,
+        "path_params": {
+          "user_id": 9999
+        },
+        "source": "rule",
+        "selected": true
+      }
+    ]
+  }
+]
