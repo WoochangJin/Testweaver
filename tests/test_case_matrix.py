@@ -71,7 +71,7 @@ def test_derive_security_cases_only_when_auth_required():
     assert len(cases) == 1
     assert cases[0].expected_status == 401
 
-def test_derive_normal_cases_uses_endpoint_success_status_code():
+def test_normal_case_status_resolved():
     endpoint = Endpoint(
         path="/users",
         method=HttpMethod.DELETE,
@@ -83,3 +83,17 @@ def test_derive_normal_cases_uses_endpoint_success_status_code():
     cases = derive_normal_cases(feature)
 
     assert cases[0].expected_status == 204
+
+
+def test_normal_case_status_unresolved():
+    endpoint = Endpoint(
+        path="/users",
+        method=HttpMethod.POST,
+        handler_name="create_user",
+        success_status_code=None,  # status_code 인자는 있는데 해석 실패한 상황
+    )
+    feature = Feature(id="POST /users", name="create_user", endpoint=endpoint, constraints=[])
+
+    cases = derive_normal_cases(feature)
+
+    assert cases[0].expected_status is None
