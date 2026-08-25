@@ -18,4 +18,5 @@ def derive_failure_cases(feature: Feature) -> list[TestCase]:
             path_params=build_path_params(feature.endpoint.path),
         )
         for index, exc in enumerate(feature.endpoint.exceptions)
+        if exc.resolved
     ]
