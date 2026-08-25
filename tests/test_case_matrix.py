@@ -22,6 +22,7 @@ def _mock_feature(**overrides) -> Feature:
         exceptions=overrides.get("exceptions", []),
     )
     return Feature(
+        id=f"{endpoint.method.value} {endpoint.path}",
         name="register",
         endpoint=endpoint,
         constraints=overrides.get("constraints", []),
