@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from testweaver.analyzer.models import Feature
-from testweaver.schema import CaseCategory, CaseSource, TestCase
 from testweaver.case_generator.payload import build_path_params, build_valid_payload
+from testweaver.schema import CaseCategory, CaseSource, TestCase
 
 
 def derive_failure_cases(feature: Feature) -> list[TestCase]:

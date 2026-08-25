@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from testweaver.analyzer.models import Feature
-from testweaver.schema import TestCaseMatrix
 from testweaver.case_generator.rules import (
     derive_boundary_cases,
     derive_failure_cases,
     derive_normal_cases,
     derive_security_cases,
 )
+from testweaver.schema import TestCaseMatrix
 
 
 def build_case_matrix(feature: Feature) -> TestCaseMatrix:

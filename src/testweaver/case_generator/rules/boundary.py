@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from testweaver.analyzer.models import Feature
-from testweaver.schema import CaseCategory, CaseSource, TestCase
 from testweaver.case_generator.payload import build_invalid_payload, build_path_params
+from testweaver.schema import CaseCategory, CaseSource, TestCase
 
 
 def derive_boundary_cases(feature: Feature) -> list[TestCase]:
