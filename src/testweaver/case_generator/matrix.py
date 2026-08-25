@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from testweaver.analyzer.models import Feature
-from testweaver.case_generator.models import TestCaseMatrix
+from testweaver.schema import TestCaseMatrix
 from testweaver.case_generator.rules import (
     derive_boundary_cases,
     derive_failure_cases,

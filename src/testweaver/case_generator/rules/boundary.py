@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from testweaver.analyzer.models import Feature
-from testweaver.case_generator.models import TestCase, TestCaseCategory
+from testweaver.schema import CaseCategory, CaseSource, TestCase
 from testweaver.case_generator.payload import build_invalid_payload, build_path_params
 
 
@@ -29,9 +29,10 @@ def _case(feature: Feature, field_name: str, variant: str, description: str) -> 
     return TestCase(
         id=f"{feature.name}::boundary::{field_name}::{variant}",
         feature_name=feature.name,
-        category=TestCaseCategory.BOUNDARY,
+        category=CaseCategory.BOUNDARY,   # ← TestCaseCategory.BOUNDARY 였던 곳
         description=description,
         expected_status=422,
         sample_payload=build_invalid_payload(feature.constraints, field_name, variant),
         path_params=build_path_params(feature.endpoint.path),
+        source=CaseSource.RULE,           # ← 새로 추가
     )
