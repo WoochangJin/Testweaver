@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from testweaver.analyzer.models import Feature
+from testweaver.analyzer.models import Feature, ParamLocation
 from testweaver.case_generator.payload import build_invalid_payload, build_path_params
 from testweaver.schema import CaseCategory, CaseSource, TestCase
 
 
 def derive_boundary_cases(feature: Feature) -> list[TestCase]:
     cases: list[TestCase] = []
-    for constraint in feature.constraints:
+    for constraint in feature.constraints_in(ParamLocation.BODY):
         if constraint.required:
             cases.append(_case(feature, constraint.field_name, "missing", f"{constraint.field_name} 필드 누락"))
         if constraint.min_length is not None:
@@ -29,10 +29,10 @@ def _case(feature: Feature, field_name: str, variant: str, description: str) -> 
     return TestCase(
         id=f"{feature.name}::boundary::{field_name}::{variant}",
         feature_name=feature.name,
-        category=CaseCategory.BOUNDARY,   # ← TestCaseCategory.BOUNDARY 였던 곳
+        category=CaseCategory.BOUNDARY,
         description=description,
         expected_status=422,
         sample_payload=build_invalid_payload(feature.constraints, field_name, variant),
         path_params=build_path_params(feature.endpoint.path),
-        source=CaseSource.RULE,           # ← 새로 추가
+        source=CaseSource.RULE,
     )

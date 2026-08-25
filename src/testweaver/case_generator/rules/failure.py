@@ -19,4 +19,5 @@ def derive_failure_cases(feature: Feature) -> list[TestCase]:
             source=CaseSource.RULE,
         )
         for index, exc in enumerate(feature.endpoint.exceptions)
+        if exc.resolved
     ]
