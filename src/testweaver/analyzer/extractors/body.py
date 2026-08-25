@@ -15,7 +15,7 @@ from __future__ import annotations
 import ast
 from typing import Any
 
-from testweaver.analyzer.ast_utils import unwrap_annotation
+from testweaver.analyzer.ast_utils import UNRESOLVED, literal_value, unwrap_annotation
 from testweaver.analyzer.extractors.base import ExtractionContext
 from testweaver.analyzer.extractors.fields import (
     DefaultInfo,
@@ -233,8 +233,6 @@ def _resolve_default(marker: ast.Call | None, assigned: ast.expr | None) -> Defa
 
     if assigned is None or assigned is marker:
         return DefaultInfo()
-
-    from testweaver.analyzer.ast_utils import UNRESOLVED, literal_value
 
     value = literal_value(assigned)
     if value is UNRESOLVED:

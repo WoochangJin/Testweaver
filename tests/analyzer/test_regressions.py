@@ -317,3 +317,90 @@ def health(): pass
     result = analyze_project(tmp_path)
     assert [feature.id for feature in result.features] == ["GET /health"]
     assert not result.notes_with(NoteCode.DYNAMIC_ROUTE)
+
+def test_exception_handler_uses_status_from_returned_response(tmp_path):
+    """보조 함수의 status_code가 아니라 실제 반환 응답의 값을 사용한다."""
+    _write(
+        tmp_path,
+        "main.py",
+        """
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+app = FastAPI()
+
+
+class SampleError(Exception):
+    pass
+
+
+def record_event(*, status_code):
+    pass
+
+
+@app.exception_handler(SampleError)
+def handle_sample_error(request, exc):
+    record_event(status_code=500)
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "not found"},
+    )
+
+
+@app.get("/sample")
+def sample():
+    raise SampleError()
+""",
+    )
+
+    [feature] = analyze_project(tmp_path).features
+    [exception] = feature.endpoint.exceptions
+
+    assert exception.exception_type == "SampleError"
+    assert exception.status_code == 404
+
+
+def test_exception_handler_ignores_status_from_unused_nested_function(tmp_path):
+    """핸들러 안에 정의만 되고 호출되지 않는 중첩 함수의 return은 무시한다.
+
+    중첩 함수의 return이 실제 응답의 return보다 얕은 깊이에 있으면 (둘 다
+    핸들러 바로 아래 문장) ast.walk 의 BFS 순서상 우연히 정답을 먼저 만나
+    버그가 가려진다. 실제 응답의 return을 if/else 안에 둬서 중첩 함수의
+    return과 같은 깊이가 되게 해야 버그가 재현된다.
+    """
+    _write(
+        tmp_path,
+        "main.py",
+        """
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+app = FastAPI()
+
+
+class SampleError(Exception):
+    legacy = False
+
+
+@app.exception_handler(SampleError)
+async def handle_sample_error(request, exc):
+    def _unused_fallback():
+        return JSONResponse(status_code=500, content={"detail": "fallback"})
+
+    if exc.legacy:
+        return JSONResponse(status_code=410, content={"detail": "gone"})
+    else:
+        return JSONResponse(status_code=404, content={"detail": "not found"})
+
+
+@app.get("/sample")
+def sample():
+    raise SampleError()
+""",
+    )
+
+    [feature] = analyze_project(tmp_path).features
+    [exception] = feature.endpoint.exceptions
+
+    assert exception.exception_type == "SampleError"
+    assert exception.status_code in (404, 410)

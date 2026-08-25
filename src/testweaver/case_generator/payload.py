@@ -1,6 +1,6 @@
 import re
 
-from testweaver.analyzer.models import Constraint
+from testweaver.analyzer.models import Constraint, ParamLocation
 
 
 def _valid_value(constraint: Constraint):
@@ -18,7 +18,8 @@ def _valid_value(constraint: Constraint):
 
 
 def build_valid_payload(constraints: list[Constraint]) -> dict:
-    return {c.field_name: _valid_value(c) for c in constraints}
+    body_only = [c for c in constraints if c.location is ParamLocation.BODY]
+    return {c.field_name: _valid_value(c) for c in body_only}
 
 
 def build_invalid_payload(constraints: list[Constraint], field_name: str, variant: str) -> dict:
