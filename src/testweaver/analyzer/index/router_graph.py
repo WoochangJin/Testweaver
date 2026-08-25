@@ -206,11 +206,12 @@ def _collect_mounts(
             continue
 
         child_expr = argument_of(node, 0, "router")
-        for child in _mount_targets(child_expr, module, imports, loop_bindings):
+        targets = _mount_targets(child_expr, module, imports, loop_bindings)
+        for child in targets:
             _record_mount(
                 node, receiver, child, module, imports, graph, constants, notes
             )
-        if not _mount_targets(child_expr, module, imports, loop_bindings):
+        if not targets:
             _note(
                 notes,
                 NoteLevel.WARNING,

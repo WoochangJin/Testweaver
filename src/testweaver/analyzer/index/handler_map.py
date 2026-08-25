@@ -14,6 +14,8 @@ import ast
 from testweaver.analyzer.ast_utils import (
     argument_of,
     attribute_or_name,
+    iter_functions,
+    iter_runtime_nodes,
     keyword_of,
     resolve_status_constant,
     split_attribute_call,
@@ -39,9 +41,7 @@ def index_exception_handlers(
 
     for module in modules.values():
         imports = import_maps[module.path]
-        for node in ast.walk(module.tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
+        for node in iter_functions(module.tree):
             for decorator in node.decorator_list:
                 if not isinstance(decorator, ast.Call):
                     continue
@@ -88,8 +88,13 @@ def _exception_ref(
 def _status_in_body(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> int | None:
-    """핸들러가 실제로 반환하는 응답에서 상태코드를 찾는다."""
-    for node in ast.walk(fn):
+    """핸들러가 실제로 반환하는 응답에서 상태코드를 찾는다.
+
+    ``ast.walk(fn)`` 은 실행되지 않는 중첩 함수·클래스의 본문까지 내려가
+    거기 있는 ``return`` 을 핸들러 자신의 응답으로 오인할 수 있다.
+    ``iter_runtime_nodes`` 로 핸들러가 실제로 실행하는 노드만 순회한다.
+    """
+    for node in iter_runtime_nodes(fn):
         if not isinstance(node, ast.Return) or node.value is None:
             continue
 
