@@ -12,9 +12,9 @@ def derive_normal_cases(feature: Feature) -> list[TestCase]:
             feature_name=feature.name,
             category=CaseCategory.NORMAL,
             description="모든 필드가 유효한 값일 때 정상 응답을 반환한다.",
-            expected_status=200,
+            expected_status=feature.endpoint.success_status_code,
             sample_payload=build_valid_payload(feature.constraints),
-            path_params=build_path_params(feature.endpoint.path), 
+            path_params=build_path_params(feature.endpoint.path),
             source=CaseSource.RULE,
         )
     ]
