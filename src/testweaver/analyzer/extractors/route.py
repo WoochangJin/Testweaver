@@ -19,6 +19,7 @@ from testweaver.analyzer.ast_utils import (
     literal_value,
     resolve_status_constant,
     split_attribute_call,
+    unwrap_annotation,
 )
 from testweaver.analyzer.extractors.base import ExtractionContext
 from testweaver.analyzer.index.context import ProjectIndex
@@ -242,8 +243,6 @@ class RouteExtractor:
         if declared is None:
             return None
         # list[OrderOut] 처럼 감싸여 있어도 안쪽 모델을 가리키게 한다.
-        from testweaver.analyzer.ast_utils import unwrap_annotation
-
         info = unwrap_annotation(declared)
         return context.resolve(info.model_name) if info.model_name else None
 

@@ -15,7 +15,12 @@ from __future__ import annotations
 
 import ast
 
-from testweaver.analyzer.ast_utils import attribute_or_name, iter_runtime_nodes
+from testweaver.analyzer.ast_utils import (
+    attribute_or_name,
+    iter_all_args,
+    iter_runtime_nodes,
+    unwrap_annotation,
+)
 from testweaver.analyzer.extractors.base import ExtractionContext
 
 #: 이 이름의 객체를 통해 호출하면 외부 자원으로 본다.
@@ -102,8 +107,6 @@ def _externally_typed_args(context: ExtractionContext) -> set[str]:
 
     이름 규칙만으로는 `async_session` 같은 변형을 놓친다.
     """
-    from testweaver.analyzer.ast_utils import iter_all_args, unwrap_annotation
-
     names: set[str] = set()
     for arg, _ in iter_all_args(context.handler):
         info = unwrap_annotation(arg.annotation)

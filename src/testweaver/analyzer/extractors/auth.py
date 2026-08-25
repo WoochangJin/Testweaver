@@ -14,7 +14,11 @@ from __future__ import annotations
 import ast
 import re
 
-from testweaver.analyzer.ast_utils import iter_runtime_nodes, resolve_status_constant
+from testweaver.analyzer.ast_utils import (
+    argument_of,
+    iter_runtime_nodes,
+    resolve_status_constant,
+)
 from testweaver.analyzer.extractors.base import ExtractionContext
 from testweaver.analyzer.models import DependencyNode, SymbolRef
 
@@ -72,8 +76,6 @@ class AuthExtractor:
         for node in iter_runtime_nodes(target.node):
             if not isinstance(node, ast.Raise) or not isinstance(node.exc, ast.Call):
                 continue
-            from testweaver.analyzer.ast_utils import argument_of
-
             status = resolve_status_constant(argument_of(node.exc, 0, "status_code"))
             if status is not None:
                 statuses.add(status)
