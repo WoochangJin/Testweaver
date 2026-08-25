@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from testweaver.analyzer.models import Feature, ParamLocation
-from testweaver.case_generator.models import TestCase, TestCaseCategory
 from testweaver.case_generator.payload import build_invalid_payload, build_path_params
+from testweaver.schema import CaseCategory, CaseSource, TestCase
 
 
 def derive_boundary_cases(feature: Feature) -> list[TestCase]:
@@ -29,9 +29,10 @@ def _case(feature: Feature, field_name: str, variant: str, description: str) -> 
     return TestCase(
         id=f"{feature.name}::boundary::{field_name}::{variant}",
         feature_name=feature.name,
-        category=TestCaseCategory.BOUNDARY,
+        category=CaseCategory.BOUNDARY,
         description=description,
         expected_status=422,
         sample_payload=build_invalid_payload(feature.constraints, field_name, variant),
         path_params=build_path_params(feature.endpoint.path),
+        source=CaseSource.RULE,
     )
