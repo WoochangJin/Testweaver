@@ -70,3 +70,16 @@ def test_derive_security_cases_only_when_auth_required():
     cases = derive_security_cases(_mock_feature(requires_auth=True))
     assert len(cases) == 1
     assert cases[0].expected_status == 401
+
+def test_derive_normal_cases_uses_endpoint_success_status_code():
+    endpoint = Endpoint(
+        path="/users",
+        method=HttpMethod.DELETE,
+        handler_name="delete_user",
+        success_status_code=204,
+    )
+    feature = Feature(id="DELETE /users", name="delete_user", endpoint=endpoint, constraints=[])
+
+    cases = derive_normal_cases(feature)
+
+    assert cases[0].expected_status == 204
