@@ -30,10 +30,10 @@ def _build_category_table(category: CaseCategory, cases: list[TestCase], start_i
     return table
 
 
-def render_matrix(matrix: TestCaseMatrix, console: Console) -> None:
+def render_matrix(matrix: TestCaseMatrix, console: Console, start_index: int = 1) -> None:
     grouped = group_cases_by_category(matrix.cases)
     tables = []
-    next_index = 1
+    next_index = start_index
     for category, cases in grouped.items():
         if not cases:
             continue
@@ -45,5 +45,7 @@ def render_matrix(matrix: TestCaseMatrix, console: Console) -> None:
 
 def render_matrices(matrices: FeatureMatrices, console: Console | None = None) -> None:
     console = console or Console()
+    next_index = 1
     for matrix in matrices:
-        render_matrix(matrix, console)
+        render_matrix(matrix, console, next_index)
+        next_index += len(matrix.cases)
