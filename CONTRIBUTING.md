@@ -52,6 +52,7 @@ test: add fixture for constraint parsing edge cases
 
 ## Pull Request
 
+- PR은 `main`이 아니라 `develop` 브랜치로 보내주세요.
 - 하나의 PR은 하나의 주제만 다루는 게 좋습니다. 여러 기능을 한 번에 묶지
   말아주세요.
 - 리뷰어 1명 이상의 승인 후 머지합니다. 작성자 본인이 자신의 PR을 머지하지
