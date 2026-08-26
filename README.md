@@ -55,6 +55,8 @@ uv run testweaver run <프로젝트경로>
 > `generate` 명령은 매트릭스 **JSON 파일 경로**를 인자로 받습니다.
 > (`generate <프로젝트경로> <기능명>` 형태가 아닙니다 — 예전 문서의 오기이니 이 표기를 보셨다면 무시하세요.)
 
+> `testweaver run <프로젝트경로>`로 실행하면, 생성된 테스트와 같은 디렉토리(`tests/generated/`)에 대상 프로젝트 전용 `conftest.py`가 자동으로 생성됩니다. AST로 FastAPI 앱 진입점과 요청 간 격리가 필요한 전역 상태(인메모리 dict/카운터 등)를 탐지해 매 테스트마다 리셋해주며, `Depends()`로 주입되는 의존성 중 자동으로 추적할 수 없는 것(DB 세션 등)은 TODO 주석으로 표시됩니다. `generate` 명령만 단독으로 쓸 경우에는 아직 이 기능이 연결되어 있지 않아 conftest.py를 직접 준비해야 합니다.
+
 각 명령어의 옵션은 `uv run testweaver <명령어> --help`로 확인할 수 있습니다.
 
 ### Python API로 직접 다루기
@@ -147,6 +149,7 @@ src/testweaver/
 │   ├── payload.py             # 유효/무효 요청 payload 생성
 │   └── rules/                 # normal/boundary/failure/security 도출 규칙
 ├── generator.py               # 매트릭스 JSON → pytest 코드 생성기
+├── conftest_generator.py      # 대상 프로젝트의 tests/conftest.py 자동 생성 (testweaver run 파이프라인에 통합)
 └── templates/
     └── test_case.py.j2        # 생성기가 사용하는 jinja2 템플릿
 

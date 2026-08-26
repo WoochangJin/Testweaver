@@ -14,19 +14,21 @@ FastAPI 프로젝트를 정적 분석해서 라우터, Pydantic 제약 조건, �
 
 ### Track D — LLM 보강(②) + CLI(③)
 
-`analyze`, `generate`, `test`, `run` 네 CLI 명령어가 구현되어 있고, `generate` 명령은 인터랙티브로 케이스를 선택할 수 있습니다. LLM 기반 케이스 보강은 아직 개발 중입니다.
+`analyze`, `generate`, `test`, `run` 네 CLI 명령어가 구현되어 있고, `generate` 명령은 인터랙티브로 케이스를 선택할 수 있습니다. LLM 기반 케이스 보강(OpenAI, `priority` 필드 기반 정렬)이 구현되어 있습니다.
 
 ### Track E — pytest 생성(④) + 문서
 
-매트릭스 JSON에서 Jinja2 템플릿으로 pytest 코드를 생성하는 기능이 완료되어 있습니다. 생성된 테스트는 status code 검증에 더해 response의 content-type이 JSON인지도 확인합니다. 또한 외부 프로젝트를 실제로 테스트할 수 있도록, 대상 프로젝트 전용 `conftest.py`를 자동 생성해주는 scaffold 기능이 추가되었습니다.
+매트릭스 JSON에서 Jinja2 템플릿으로 pytest 코드를 생성하는 기능이 완료되어 있습니다. 생성된 테스트는 status code 검증에 더해 response의 content-type이 JSON인지도 확인합니다. 또한 외부 프로젝트를 실제로 테스트할 수 있도록, 대상 프로젝트 전용 `conftest.py`를 AST 분석으로 자동 생성하는 기능을 `testweaver run` 파이프라인에 통합했습니다. 생성된 conftest.py에는 대상 프로젝트가 TestWeaver 레포 밖 임의의 위치에 있어도 정상적으로 import되도록 sys.path 부트스트랩을 포함시켰고, 진입점 탐지 로직이 프로젝트 절대경로에 우연히 "test"라는 상위 폴더가 포함된 경우 대상 파일을 스킵해버리던 버그도 수정했습니다. `generate` 명령 단독 사용 시에는 아직 연결되어 있지 않습니다(project_root를 인자로 받지 않기 때문).
 
 ## 8/27 제출 전까지
 
 결과보고서와 AI 활용 서식을 완성하는 것이 최우선입니다. README의 CLI 사용법을 실제 명령어에 맞게 정정하는 작업도 포함됩니다. 오늘 발견한 Track C의 두 버그는 코드 수정 없이 이슈로만 등록해두고, 결과보고서의 "확인된 한계와 향후 계획" 섹션에 명시하는 것으로 이번 제출에서는 충분합니다.
 
+오늘 conftest.py 자동 생성 기능을 실제 book management 프로젝트로 검증하는 과정에서 두 가지가 추가로 확인되었습니다. 하나는 LLM이 제안한 query parameter 기반 실패 케이스(예: `year=999`, `limit=0`)가 실제 생성된 요청 코드에는 반영되지 않아 항상 실패하는 문제로, 이는 기존에 문서화된 "Query/Header/Cookie 값을 실제 요청에 반영" 이슈(P1)와 동일한 근본 원인입니다. 다른 하나는 LLM이 프로젝트의 실제 검증 규칙(에러 응답 포맷, path parameter 제약 등)을 분석 없이 일반적인 통념으로 추측해 케이스를 생성하는 경향으로, LLM 보강 기능(Track D)의 정확도 한계로 별도 기록합니다. 둘 다 이번 제출 범위에서는 코드 수정 없이 결과보고서에 알려진 제한사항으로만 명시합니다.
+
 ## 1차 평가(9/3~4) 전까지
 
-Track C의 두 버그(path_params 재사용, error_code 포맷 불일치)를 실제로 수정합니다. Track A/B의 실제 파서 출력이 `Endpoint`/`Constraint` 계약과 정확히 맞물리는지 확인하는 통합 체크포인트도 이 시기에 다시 확인이 필요합니다.
+Track C의 두 버그(path_params 재사용, error_code 포맷 불일치)를 실제로 수정합니다. Track A/B의 실제 파서 출력이 `Endpoint`/`Constraint` 계약과 정확히 맞물리는지 확인하는 통합 체크포인트도 이 시기에 다시 확인이 필요합니다. `generate` 명령에도 conftest.py 자동 생성을 연결할지(예: `--project-root` 옵션 추가) 이 시기에 결정합니다.
 
 ## 장기 개선 과제
 
@@ -34,7 +36,7 @@ TestWeaver 팀이 이전에 정리한 개선 문서를 기준으로 구조적 �
 
 **P0 — 먼저 합의하거나 해결해야 하는 구조**
 
-`NORMAL` 케이스의 의미(schema-valid request로 볼지, 실제 성공을 보장하는 request로 볼지)를 명확히 정의하는 것이 첫 번째입니다. 실행 환경 문제는 오늘 scaffold로 부분적으로 풀었지만, `testweaver run . --app src.main:app` 같은 CLI 차원의 정식 지원과 dependency override 설계는 아직 남아 있습니다.
+`NORMAL` 케이스의 의미(schema-valid request로 볼지, 실제 성공을 보장하는 request로 볼지)를 명확히 정의하는 것이 첫 번째입니다. 실행 환경 문제는 conftest.py 자동 생성으로 부분적으로 풀었지만, `testweaver run . --app src.main:app` 같은 CLI 차원의 정식 지원과 dependency override 설계는 아직 남아 있습니다. conftest_generator 자체도 진입점 파일 하나만 분석하기 때문에, 상태가 여러 파일에 걸쳐 있는 프로젝트나 SQLAlchemy 세션 같은 실제 외부 리소스에 연결된 의존성은 자동 리셋을 만들지 못하고 TODO로 남깁니다.
 
 **P1 — 실제 테스트 기능 완성**
 
