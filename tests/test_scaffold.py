@@ -2,8 +2,6 @@
 to run TestWeaver-generated tests against an arbitrary target project
 (instead of this repo's own demo_app fixture)."""
 
-from pathlib import Path
-
 import pytest
 
 from testweaver.scaffold import generate_conftest
