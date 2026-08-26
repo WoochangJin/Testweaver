@@ -44,6 +44,7 @@ def analyze(
         console.print(f"[{style}]{note}[/{style}]")
 
     matrices = pipeline.build_matrices(result.features)
+    matrices = pipeline.augment_with_llm(matrices, result.features)
     write_matrices(matrices, output)
     console.print(f"[green]Wrote {len(matrices)} matrices to {output}[/green]")
 
@@ -99,6 +100,7 @@ def run(
         raise typer.Exit(code=1)
 
     matrices = pipeline.build_matrices(result.features)
+    matrices = pipeline.augment_with_llm(matrices, result.features)
     selected = _select_matrices_interactively(matrices, console)
 
     code = pipeline.generate_pytest_module(selected)
