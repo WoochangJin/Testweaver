@@ -30,6 +30,7 @@ class TestCase(BaseModel):
     path_params: dict | None = None
     source: CaseSource
     selected: bool = False
+    priority: int | None = None
 
 class TestCaseMatrix(BaseModel):
 
