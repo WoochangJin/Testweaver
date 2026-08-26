@@ -32,6 +32,16 @@ def test_render_matrix_handles_missing_category_without_error():
     assert "login-001" in output
 
 
+def test_render_matrix_shows_category_column():
+    matrices = load_matrices(FIXTURE_PATH)
+    console = Console(record=True, width=120)
+    render_matrix(matrices[0], console)
+    output = console.export_text()
+    assert "Category" in output
+    assert "normal" in output
+    assert "boundary" in output
+
+
 def test_render_matrix_numbers_cases_continuously_across_categories():
     matrices = load_matrices(FIXTURE_PATH)
 

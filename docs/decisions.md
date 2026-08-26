@@ -81,6 +81,38 @@
 - **트레이드오프**: 사용자가 한 번에 모든 매트릭스의 케이스 번호를 확인하고 입력해야 해서, 매트릭스 수가 많아지면 입력이 번거로워질 수 있음. 매트릭스별로 나눠서 바로바로 확인하며 선택하던 방식의 장점은 포기.
 - **관련 이슈/PR**: #44
 
+### LLM 기반 케이스 생성 + 우선순위 정렬 (OpenAI, priority 필드)
+- **무엇을 결정했나**: `OPENAI_API_KEY`가 설정된 경우, `llm_augment.py`가 매트릭스마다 GPT를
+  한 번 호출해 (1) rule 기반 로직이 놓친 케이스를 `source=CaseSource.LLM`으로 추가 제안하고,
+  (2) rule+LLM 전체 케이스에 우선순위(`TestCase.priority: int | None`, 1이 최우선)를 매기도록
+  구현. 키가 없으면 `augment_matrices`가 매트릭스를 그대로 통과시켜 기존 #44 동작(카테고리 순서)을
+  유지. `order_cases_for_selection`(`grouping.py`)은 케이스 전체에 priority가 채워져 있을 때만
+  priority 순으로 정렬하고, 아니면 기존 카테고리 순서로 폴백 — render/selection이 모두 이
+  함수 하나에 위임하므로 두 경로에 동일하게 적용됨.
+- **왜** (고려했던 대안 포함): provider는 GPT/Claude/Gemini 세 곳 모두 지원하는 안도 검토했으나,
+  런타임 비용(어차피 설정된 provider 하나만 호출)보다 개발/테스트 비용(SDK별 매핑, provider별
+  mock fixture)이 선형으로 늘어나는 게 더 커서 이번 브랜치는 provider-agnostic 인터페이스
+  없이 OpenAI 하나로 좁힘. 추후 다른 provider 추가 시 `llm_augment.py`의 `ChatClient` Protocol
+  자리에 맞는 클라이언트만 주입하면 되는 구조로 열어둠.
+- **트레이드오프**: `TestCase.priority` 필드는 schema.py(Track C 소유 계약 파일)를 D/E가
+  직접 확장. Optional 필드라 rule 기반 파이프라인은 영향 없음(항상 None으로 둬도 무방)이라
+  C의 사전 승인 없이 진행하고 사후 통지하기로 함 — Analyzer 스키마 확장 때(`Feature.id`/
+  `Constraint.location`) 쓴 선례를 따름. LLM 호출 결과(`priority_order`)가 케이스 전체를
+  정확히 한 번씩 포함하지 않으면 보정하지 않고 `ValueError`로 처리(계약 위반은 조용히
+  고치지 않는다는 원칙 적용).
+- **관련 이슈/PR**: #38
+
+### render.py 카테고리별 테이블 → 매트릭스당 단일 테이블
+- **무엇을 결정했나**: 매트릭스 하나에 NORMAL/BOUNDARY/FAILURE/SECURITY 테이블을 각각 그리던
+  방식을 없애고, `order_cases_for_selection` 순서로 정렬한 케이스를 "Category" 컬럼이 있는
+  테이블 하나로 표시하도록 변경.
+- **왜**: 우선순위 정렬이 카테고리 경계를 넘나드는데, 카테고리별로 테이블을 분리하면 우선순위
+  순서가 화면에 그대로 드러나지 않음. 단일 테이블 + Category 컬럼이면 카테고리 정보를 잃지
+  않으면서도 실제 정렬 순서를 그대로 보여줄 수 있음.
+- **트레이드오프**: 카테고리별로 시각적으로 구획된 표를 보던 기존 UI는 포기. `render_matrices`의
+  연속 행 번호(#44)와 `select_cases_globally`는 구조 변경 없이 그대로 재사용됨.
+- **관련 이슈/PR**: #38
+
 ---
 
 ## Track E — pytest 생성 (④ 테스트 데이터 자동 생성) + 문서총괄

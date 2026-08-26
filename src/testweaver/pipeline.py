@@ -16,6 +16,7 @@ from testweaver.analyzer.models import AnalysisResult, Feature
 from testweaver.analyzer.pipeline import analyze_project
 from testweaver.case_generator.matrix import build_case_matrix
 from testweaver.generator import generate_test_module
+from testweaver.llm_augment import augment_matrices, get_llm_client
 from testweaver.schema import TestCase, TestCaseMatrix
 
 
@@ -50,6 +51,15 @@ def build_matrices(features: list[Feature]) -> list[TestCaseMatrix]:
         cases = [_normalize_case(case, matrix.method) for case in matrix.cases]
         matrices.append(matrix.model_copy(update={"cases": cases}))
     return matrices
+
+
+def augment_with_llm(matrices: list[TestCaseMatrix], features: list[Feature]) -> list[TestCaseMatrix]:
+    """Layer LLM-proposed cases and priority ranking on top of rule-derived matrices.
+
+    No-ops (returns matrices unchanged) when OPENAI_API_KEY isn't set.
+    """
+    client = get_llm_client()
+    return augment_matrices(matrices, features, client)
 
 
 def generate_pytest_module(matrices: list[TestCaseMatrix]) -> str:
