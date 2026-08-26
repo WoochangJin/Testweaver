@@ -108,6 +108,16 @@ def run(
     output.write_text(code, encoding="utf-8")
     console.print(f"[green]Wrote generated tests to {output}[/green]")
 
+    conftest_path = pipeline.write_conftest(project_root, output.parent)
+    if conftest_path:
+        console.print(f"[green]Wrote {conftest_path}[/green]")
+    else:
+        console.print(
+            "[yellow]conftest.py를 자동 생성하지 못했습니다 "
+            f"(FastAPI() 진입점을 찾지 못했거나 여러 개 발견됨). "
+            f"{output.parent}/conftest.py를 직접 준비해주세요.[/yellow]"
+        )
+
     exit_code = pipeline.run_tests(output)
     raise typer.Exit(code=exit_code)
 
