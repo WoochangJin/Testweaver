@@ -23,6 +23,9 @@ class Test{{ feature.class_name }}:
 {% endif %}
 {% if case.expected_status is not none %}
         assert response.status_code == {{ case.expected_status }}
+{% if case.expected_status not in (204, 304) %}
+        assert response.headers.get("content-type", "").startswith("application/json")
+{% endif %}
 {% else %}
         # expected_status is null in the matrix (exception flow not yet
         # resolved for this case) — skipping until the matrix is fixed.
