@@ -43,6 +43,7 @@ class AppEntrypoint:
     module_path: str  # dotted, importable from project root
     app_var: str
     file_path: Path
+    project_root: Path  # absolute; embedded in the generated conftest's sys.path bootstrap
 
 
 @dataclass
@@ -73,9 +74,11 @@ class DetectionResult:
 
 def find_app_entrypoint(project_root: Path) -> AppEntrypoint:
     """Find the first `x = FastAPI(...)` module-level assignment under project_root."""
+    project_root = project_root.resolve()
     candidates: list[AppEntrypoint] = []
     for py_file in sorted(project_root.rglob("*.py")):
-        if "test" in py_file.parts or py_file.name.startswith("test_"):
+        rel_parts = py_file.relative_to(project_root).parts
+        if "test" in rel_parts or "tests" in rel_parts or py_file.name.startswith("test_"):
             continue
         try:
             tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
@@ -92,7 +95,14 @@ def find_app_entrypoint(project_root: Path) -> AppEntrypoint:
                 if isinstance(target, ast.Name):
                     rel = py_file.relative_to(project_root).with_suffix("")
                     module_path = ".".join(rel.parts)
-                    candidates.append(AppEntrypoint(module_path=module_path, app_var=target.id, file_path=py_file))
+                    candidates.append(
+                        AppEntrypoint(
+                            module_path=module_path,
+                            app_var=target.id,
+                            file_path=py_file,
+                            project_root=project_root,
+                        )
+                    )
     if not candidates:
         raise ValueError(f"No `x = FastAPI(...)` assignment found under {project_root}")
     if len(candidates) > 1:
@@ -203,10 +213,18 @@ If detection missed something (a DB session, an external client, etc.),
 fix the TODOs below rather than editing the detection logic per-project.
 """
 
+import sys
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+
+# The target project isn't necessarily on sys.path when pytest runs from
+# TestWeaver's own working directory, so make it importable explicitly.
+_TARGET_PROJECT_ROOT = Path(r"{project_root}")
+if str(_TARGET_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_TARGET_PROJECT_ROOT))
 
 from {module_path} import app{extra_imports}
 {module_alias_import}
@@ -223,6 +241,7 @@ def client() -> Iterator[TestClient]:
 
 def render_conftest(result: DetectionResult) -> str:
     module_path = result.entrypoint.module_path
+    project_root = result.entrypoint.project_root
     extra_imports = "".join(f", {c.name}" for c in result.containers)
 
     needs_module_alias = bool(result.counters)
@@ -257,6 +276,7 @@ def render_conftest(result: DetectionResult) -> str:
 
     return CONFTEST_TEMPLATE.format(
         module_path=module_path,
+        project_root=project_root,
         extra_imports=extra_imports,
         module_alias_import=module_alias_import,
         pre_reset=pre_reset,
