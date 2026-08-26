@@ -15,7 +15,9 @@ def derive_failure_cases(feature: Feature) -> list[TestCase]:
             expected_status=exc.status_code,
             expected_error_code=exc.error_code,
             sample_payload=build_valid_payload(feature.constraints),
-            path_params=build_path_params(feature.endpoint.path),
+            path_params=build_path_params(
+                feature.endpoint.path, not_found=exc.status_code == 404
+            ),
             source=CaseSource.RULE,
         )
         for index, exc in enumerate(feature.endpoint.exceptions)
