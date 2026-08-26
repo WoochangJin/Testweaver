@@ -2,6 +2,12 @@ import re
 
 from testweaver.analyzer.models import Constraint, ParamLocation
 
+#: normal/boundary/security 케이스가 기대하는 "리소스가 존재함" id.
+_EXISTING_ID = 1
+#: 404(not-found) 계열 failure 케이스가 기대하는 "리소스가 존재하지 않음" id.
+#: _EXISTING_ID와 절대 겹치지 않도록 임의로 큰 값을 사용 (#48).
+_NOT_FOUND_ID = 99999
+
 
 def _valid_value(constraint: Constraint):
     if constraint.allowed_values:
@@ -44,6 +50,17 @@ def build_invalid_payload(constraints: list[Constraint], field_name: str, varian
         payload[field_name] = "__not_in_allowed_values__"
     return payload
 
-def build_path_params(path: str) -> dict | None:
+
+def build_path_params(path: str, *, not_found: bool = False) -> dict | None:
+    """엔드포인트 경로에서 {name} 형태의 path param을 추출해 값을 채운다.
+
+    기본값(not_found=False)은 리소스가 존재해야 하는 케이스(normal/boundary/
+    security)용으로 _EXISTING_ID를 채운다. not_found=True는 404 같은
+    not-found 계열 failure 케이스용으로, 같은 feature의 존재 케이스와
+    id가 절대 겹치지 않도록 _NOT_FOUND_ID를 채운다 (#48 — 이전에는 항상
+    같은 id(1)를 써서 exists 케이스와 not-found 케이스가 동시에 통과할
+    수 없었음).
+    """
     names = re.findall(r"\{(\w+)\}", path)
-    return {name: 1 for name in names} or None
+    value = _NOT_FOUND_ID if not_found else _EXISTING_ID
+    return {name: value for name in names} or None

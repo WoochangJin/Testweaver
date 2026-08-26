@@ -32,7 +32,15 @@ class Test{{ feature.class_name }}:
         pytest.skip("expected_status not resolved for {{ case.id }}")
 {% endif %}
 {% if case.expected_error_code is not none %}
-        assert response.json().get("error_code") == "{{ case.expected_error_code }}"
+        # FastAPI's default HTTPException returns {"detail": ...}, not
+        # {"error_code": ...} — only projects with a custom error_code field
+        # return the latter. Check both so this doesn't always fail against
+        # a plain FastAPI project (#48).
+        body = response.json()
+        assert (
+            body.get("error_code") == "{{ case.expected_error_code }}"
+            or body.get("detail") == "{{ case.expected_error_code }}"
+        )
 {% endif %}
 
 {% endfor %}
