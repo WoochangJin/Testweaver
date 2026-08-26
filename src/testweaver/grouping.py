@@ -12,10 +12,15 @@ def group_cases_by_category(cases: list[TestCase]) -> dict[CaseCategory, list[Te
 
 
 def order_cases_for_selection(cases: list[TestCase]) -> list[TestCase]:
-    """Flatten cases in the same category order used when rendering.
+    """Order cases for display/selection.
 
-    Keeps selection indices aligned with the row numbers render_matrix prints,
-    since both derive from group_cases_by_category's enum ordering.
+    When every case carries an LLM-assigned `priority`, cases are sorted by
+    that rank ascending (1 = highest priority). Otherwise falls back to the
+    category order used since issue #44 (NORMAL -> BOUNDARY -> FAILURE ->
+    SECURITY), which is also what a matrix with no LLM ranking (priority is
+    None on every case) gets.
     """
+    if cases and all(case.priority is not None for case in cases):
+        return sorted(cases, key=lambda case: case.priority)
     grouped = group_cases_by_category(cases)
     return [case for group in grouped.values() for case in group]
