@@ -234,7 +234,6 @@ def render_conftest(result: DetectionResult) -> str:
     pre_reset = "\n".join(pre_reset_lines) if pre_reset_lines else "    pass"
 
     override_lines = []
-    override_clear_lines = []
     for dep in result.dependencies:
         if dep.resolved_by_container:
             override_lines.append(f"    # {dep.name}() already resolves to a container reset above; no override needed.")

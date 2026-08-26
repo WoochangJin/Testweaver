@@ -4,7 +4,6 @@ The application deliberately uses in-memory storage, as required by the
 exercise. Data is lost whenever the process restarts.
 """
 
-from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
@@ -17,9 +16,9 @@ class BookCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=200)
     author: str = Field(..., min_length=1, max_length=100)
-    isbn: Optional[str] = Field(default=None, min_length=13, max_length=13)
-    publication_year: Optional[int] = Field(default=None, ge=1000, le=2024)
-    genre: Optional[str] = Field(default=None, max_length=50)
+    isbn: str | None = Field(default=None, min_length=13, max_length=13)
+    publication_year: int | None = Field(default=None, ge=1000, le=2024)
+    genre: str | None = Field(default=None, max_length=50)
 
 
 class Book(BookCreate):
@@ -29,7 +28,7 @@ class Book(BookCreate):
 
 
 # In-memory storage required by the exercise.
-books_db: Dict[int, Book] = {}
+books_db: dict[int, Book] = {}
 next_id: int = 1
 
 
@@ -47,17 +46,17 @@ def get_book_or_404(book_id: int) -> Book:
 
 @app.get(
     "/books",
-    response_model=List[Book],
+    response_model=list[Book],
     response_model_exclude_none=True,
     status_code=status.HTTP_200_OK,
 )
 def get_books(
-    author: Optional[str] = Query(default=None),
-    genre: Optional[str] = Query(default=None),
-    year: Optional[int] = Query(default=None, ge=1000, le=2024),
+    author: str | None = Query(default=None),
+    genre: str | None = Query(default=None),
+    year: int | None = Query(default=None, ge=1000, le=2024),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=10, ge=1),
-) -> List[Book]:
+) -> list[Book]:
     """Retrieve books, with optional filtering and pagination."""
 
     books = list(books_db.values())
