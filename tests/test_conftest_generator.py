@@ -12,8 +12,11 @@ of a live project. Create both fixture directories (see chat) before running.
 from pathlib import Path
 
 import pytest
-
-from testweaver.conftest_generator import analyze_state, find_app_entrypoint
+from testweaver.conftest_generator import (
+    analyze_state,
+    find_app_entrypoint,
+    generate_conftest,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -51,3 +54,34 @@ def test_falls_back_to_todo_for_unresolvable_depends() -> None:
 def test_raises_on_missing_app() -> None:
     with pytest.raises(ValueError):
         find_app_entrypoint(FIXTURES)
+
+
+def test_generated_conftest_embeds_absolute_project_root() -> None:
+    """The sys.path bootstrap must use an absolute path.
+
+    Otherwise imports break as soon as pytest is invoked from a directory
+    other than the target project's own root (e.g. TestWeaver's own repo
+    root, which is the normal case for `testweaver run <target>`).
+    """
+    project_root = (FIXTURES / "sample_inmemory_crud_app").resolve()
+    code = generate_conftest(FIXTURES / "sample_inmemory_crud_app")
+
+    assert str(project_root) in code
+    assert "sys.path.insert" in code
+
+
+def test_entrypoint_detection_ignores_test_dirs_relative_to_project_root_only(tmp_path) -> None:
+    """A `test`/`tests` segment ABOVE project_root must not exclude files inside it.
+
+    Regression: find_app_entrypoint used to filter on py_file.parts (the full
+    absolute path), so a project sitting under e.g. .../Desktop/test/my-project/
+    had every one of its files skipped -- "test" matched a parent directory
+    that has nothing to do with the project's own test files.
+    """
+    project_root = tmp_path / "test" / "my-project"
+    project_root.mkdir(parents=True)
+    (project_root / "main.py").write_text('app = FastAPI(title="x")\n')
+    (project_root / "test_main.py").write_text("def test_x(): assert True\n")
+
+    entrypoint = find_app_entrypoint(project_root)
+    assert entrypoint.module_path == "main"

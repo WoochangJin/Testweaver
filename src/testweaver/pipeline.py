@@ -4,8 +4,9 @@ Keeps the analyze -> case-matrix -> pytest-module chain independent of
 CLI argument parsing, so `testweaver/__init__.py` only wires flags to
 these functions and each step stays testable without invoking Typer.
 """
-
 from __future__ import annotations
+
+from testweaver.conftest_generator import generate_conftest
 
 import re
 from pathlib import Path
@@ -71,3 +72,24 @@ def generate_pytest_module(matrices: list[TestCaseMatrix]) -> str:
 def run_tests(path: Path) -> int:
     """Run pytest in-process against the given path and return its exit code."""
     return int(pytest.main([str(path)]))
+
+def write_conftest(project_root: Path, output_dir: Path) -> Path | None:
+    """Generate tests/conftest.py-equivalent next to the generated pytest module.
+    Placed in output_dir (not the repo's own tests/conftest.py) so it only
+    applies to the generated tests: pytest resolves fixtures from the
+    closest conftest.py first, so this safely overrides TestWeaver's own
+    dev-fixture `client` (which points at tests/fixtures/demo_app) without
+    touching it.
+ 
+    Returns the written path, or None if entrypoint detection failed --
+    that's a normal outcome (e.g. multiple FastAPI() instances, or no
+    module-level FastAPI() found), not a pipeline error. The caller decides
+    how to surface that to the user.
+    """
+    try:
+        code = generate_conftest(project_root)
+    except ValueError:
+        return None
+    conftest_path = output_dir / "conftest.py"
+    conftest_path.write_text(code, encoding="utf-8")
+    return conftest_path
