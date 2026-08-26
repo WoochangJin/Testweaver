@@ -36,7 +36,32 @@ uv run pytest
 
 ## 사용법
 
-### 1. 규칙 기반으로 테스트 케이스 매트릭스 만들기
+### CLI로 실행하기
+
+```bash
+# 1. FastAPI 프로젝트를 분석해서 매트릭스 생성
+uv run testweaver analyze <프로젝트경로> -o matrix.json
+
+# 2. 매트릭스에서 케이스를 골라 pytest 코드 생성 (인터랙티브로 케이스 선택)
+uv run testweaver generate matrix.json -o tests/generated/test_generated.py
+
+# 3. 생성된 테스트 실행
+uv run testweaver test tests/generated
+
+# 또는 analyze → generate → run을 한 번에
+uv run testweaver run <프로젝트경로>
+```
+
+> `generate` 명령은 매트릭스 **JSON 파일 경로**를 인자로 받습니다.
+> (`generate <프로젝트경로> <기능명>` 형태가 아닙니다 — 예전 문서의 오기이니 이 표기를 보셨다면 무시하세요.)
+
+각 명령어의 옵션은 `uv run testweaver <명령어> --help`로 확인할 수 있습니다.
+
+### Python API로 직접 다루기
+
+CLI 없이 코드에서 직접 규칙 기반 케이스 도출/생성을 다루고 싶다면 아래 방식을 사용할 수 있습니다.
+
+#### 1. 규칙 기반으로 테스트 케이스 매트릭스 만들기
 
 `Feature`(엔드포인트 + 제약 조건 + 예외 흐름)가 주어지면, 정상/경계/실패/보안 네 가지 관점의 케이스를 자동으로 도출합니다.
 
@@ -59,9 +84,9 @@ matrix = build_case_matrix(feature)
 # matrix.cases 안에 normal/boundary/failure/security 케이스가 들어있음
 ```
 
-> 현재는 규칙 기반 도출까지만 구현되어 있어, 새로 도출된 케이스의 `selected`는 기본값(`False`)입니다. 어떤 케이스를 실제로 테스트 코드로 만들지 선택하는 CLI/LLM 보강 단계는 개발 중입니다. 그 전까지는 아래 2번처럼 `selected` 값이 채워진 매트릭스 JSON을 직접 사용하는 걸 권장합니다.
+> 규칙 기반으로 새로 도출된 케이스의 `selected`는 기본값(`False`)입니다. 어떤 케이스를 실제로 테스트 코드로 만들지는 CLI의 `generate` 명령이 인터랙티브로 선택하게 하거나, 아래 2번처럼 `selected` 값이 채워진 매트릭스 JSON을 직접 사용하면 됩니다.
 
-### 2. 매트릭스 JSON에서 pytest 코드 생성
+#### 2. 매트릭스 JSON에서 pytest 코드 생성
 
 `tests/fixtures/mock_matrix.json`에 `selected: true`가 채워진 샘플 매트릭스가
 있습니다. 스키마:
@@ -96,7 +121,7 @@ generate_from_file(
 
 `expected_status`가 아직 확정되지 않은(`null`) 케이스는 `pytest.skip()`으로 생성되어, 매트릭스의 미해결 지점이 테스트 결과에서도 그대로 드러납니다. 경로에 `{user_id}` 같은 path parameter가 있는 케이스는 `path_params` 필드값으로 실제 URL이 채워집니다.
 
-### 3. 생성된 테스트 실행
+#### 3. 생성된 테스트 실행
 
 ```bash
 uv run pytest tests/generated/test_generated.py -v
@@ -108,25 +133,32 @@ uv run pytest tests/generated/test_generated.py -v
 
 ```
 src/testweaver/
+├── __init__.py                # CLI 진입점 (analyze / generate / test / run)
+├── pipeline.py                # analyze → matrix → pytest 전체 파이프라인 오케스트레이션
+├── loader.py                  # 매트릭스 JSON 로딩
+├── selection.py               # 인터랙티브 케이스 선택
+├── render.py                  # 매트릭스 콘솔 출력
+├── writer.py                  # 매트릭스 JSON 저장
+├── schema.py                  # TestCase / TestCaseMatrix 스키마
 ├── analyzer/
-│   └── models.py           # Feature/Endpoint/Constraint 등 분석 결과 스키마
+│   └── models.py              # Feature/Endpoint/Constraint 등 분석 결과 스키마
 ├── case_generator/
-│   ├── models.py            # TestCase/TestCaseMatrix 스키마
-│   ├── matrix.py             # build_case_matrix: 4관점 케이스 종합
-│   ├── payload.py            # 유효/무효 요청 payload 생성
-│   └── rules/                # normal/boundary/failure/security 도출 규칙
-├── generator.py              # 매트릭스 JSON → pytest 코드 생성기
+│   ├── matrix.py              # build_case_matrix: 4관점 케이스 종합
+│   ├── payload.py             # 유효/무효 요청 payload 생성
+│   └── rules/                 # normal/boundary/failure/security 도출 규칙
+├── generator.py               # 매트릭스 JSON → pytest 코드 생성기
 └── templates/
-    └── test_case.py.j2       # 생성기가 사용하는 jinja2 템플릿
+    └── test_case.py.j2        # 생성기가 사용하는 jinja2 템플릿
 
 tests/
 ├── conftest.py                # client fixture (TestClient + dependency_overrides)
 ├── fixtures/
 │   ├── mock_matrix.json       # 테스트 케이스 매트릭스 샘플
-│   └── demo_app/               # 검증 전용 스텁 FastAPI 앱
+│   └── demo_app/              # 검증 전용 스텁 FastAPI 앱
 ├── test_case_matrix.py        # 규칙 기반 케이스 도출 단위 테스트
 ├── test_payload.py            # payload 빌더 단위 테스트
-└── generated/                   # 생성기 출력 (git에 커밋되지 않음)
+├── test_cli.py                # CLI 명령어 단위 테스트
+└── generated/                 # 생성기 출력 (git에 커밋되지 않음)
 ```
 
 ## 테스트
