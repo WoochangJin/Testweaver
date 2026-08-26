@@ -4,8 +4,19 @@ from testweaver.grouping import order_cases_for_selection
 from testweaver.schema import FeatureMatrices, TestCaseMatrix
 
 
-def parse_selection(text: str) -> set[int]:
-    """Parse a comma-separated selection expression like "1,3,5-7" into row numbers."""
+def parse_selection(text: str, total: int) -> set[int]:
+    """Parse a selection expression into row numbers.
+
+    Accepts comma-separated numbers/ranges like "1,3,5-7", or the
+    case-insensitive keywords "all" (every row from 1 to `total`) and "none"
+    (no rows). `total` is needed to expand "all" into concrete indices.
+    """
+    normalized = text.strip().lower()
+    if normalized == "all":
+        return set(range(1, total + 1))
+    if normalized == "none":
+        return set()
+
     tokens = [token.strip() for token in text.split(",") if token.strip()]
     if not tokens:
         raise ValueError(f"empty selection: {text!r}")

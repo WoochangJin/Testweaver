@@ -9,31 +9,47 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "mock_matrix.json"
 
 
 def test_parse_selection_handles_single_numbers_and_ranges():
-    assert parse_selection("1,3,5-7") == {1, 3, 5, 6, 7}
+    assert parse_selection("1,3,5-7", total=10) == {1, 3, 5, 6, 7}
 
 
 def test_parse_selection_deduplicates_overlap():
-    assert parse_selection("1,1,1-2") == {1, 2}
+    assert parse_selection("1,1,1-2", total=10) == {1, 2}
 
 
 def test_parse_selection_rejects_empty_input():
     with pytest.raises(ValueError):
-        parse_selection("   ")
+        parse_selection("   ", total=10)
 
 
 def test_parse_selection_rejects_non_numeric_token():
     with pytest.raises(ValueError):
-        parse_selection("1,abc")
+        parse_selection("1,abc", total=10)
 
 
 def test_parse_selection_rejects_reversed_range():
     with pytest.raises(ValueError):
-        parse_selection("5-3")
+        parse_selection("5-3", total=10)
 
 
 def test_parse_selection_rejects_zero_or_negative():
     with pytest.raises(ValueError):
-        parse_selection("0")
+        parse_selection("0", total=10)
+
+
+def test_parse_selection_all_keyword_selects_every_row():
+    assert parse_selection("all", total=5) == {1, 2, 3, 4, 5}
+
+
+def test_parse_selection_all_keyword_is_case_insensitive():
+    assert parse_selection("ALL", total=3) == {1, 2, 3}
+
+
+def test_parse_selection_none_keyword_selects_nothing():
+    assert parse_selection("none", total=5) == set()
+
+
+def test_parse_selection_none_keyword_is_case_insensitive():
+    assert parse_selection("None", total=5) == set()
 
 
 def test_select_cases_marks_only_the_chosen_rows_selected():
