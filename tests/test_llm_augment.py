@@ -178,6 +178,56 @@ def test_augment_matrix_rejects_duplicate_temp_ids_among_new_cases():
         augment_matrix(matrix, _mock_feature(), client)
 
 
+def test_augment_matrix_rejects_null_byte_in_description():
+    matrix = SchemaTestCaseMatrix(
+        feature_name="register", endpoint="/users", method="POST", cases=[_rule_case("register-1")]
+    )
+    client = _FakeClient(
+        {
+            "new_cases": [
+                {
+                    "temp_id": "llm-a",
+                    "category": "security",
+                    "description": "email \x00\x00 invalid",
+                    "expected_status": None,
+                    "expected_error_code": None,
+                    "sample_payload": None,
+                    "path_params": None,
+                }
+            ],
+            "priority_order": ["register-1", "llm-a"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="garbled"):
+        augment_matrix(matrix, _mock_feature(), client)
+
+
+def test_augment_matrix_rejects_replacement_char_in_expected_error_code():
+    matrix = SchemaTestCaseMatrix(
+        feature_name="register", endpoint="/users", method="POST", cases=[_rule_case("register-1")]
+    )
+    client = _FakeClient(
+        {
+            "new_cases": [
+                {
+                    "temp_id": "llm-a",
+                    "category": "security",
+                    "description": "malformed token",
+                    "expected_status": 400,
+                    "expected_error_code": "INVALID_�TOKEN",
+                    "sample_payload": None,
+                    "path_params": None,
+                }
+            ],
+            "priority_order": ["register-1", "llm-a"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="garbled"):
+        augment_matrix(matrix, _mock_feature(), client)
+
+
 def test_augment_matrix_does_not_mutate_original_matrix():
     matrix = SchemaTestCaseMatrix(
         feature_name="register", endpoint="/users", method="POST", cases=[_rule_case("register-1")]

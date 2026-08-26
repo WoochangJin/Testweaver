@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any, Protocol
 
 from testweaver.analyzer.models import Feature
 from testweaver.schema import CaseCategory, CaseSource, TestCase, TestCaseMatrix
 
 _MODEL = "gpt-4o-mini"
+
+_CONTROL_CHAR_RE = re.compile("[\x00-\x1f�]")
 
 _SYSTEM_PROMPT = (
     "You are a QA engineer helping design test cases for a FastAPI endpoint. "
@@ -135,6 +138,23 @@ def _build_new_case(feature_name: str, index: int, raw: dict[str, Any]) -> TestC
     )
 
 
+def _reject_garbled_text(spec: dict[str, Any], feature_name: str) -> None:
+    """Reject a new_case spec whose text fields contain control chars or U+FFFD.
+
+    gpt-4o-mini has been observed emitting mojibake (stray NUL bytes, U+FFFD)
+    when generating non-ASCII descriptions. generator.py embeds `description`
+    raw into a docstring, so a NUL byte here becomes a literal NUL in the
+    generated .py file and crashes ast.parse.
+    """
+    for field in ("description", "expected_error_code"):
+        value = spec.get(field)
+        if isinstance(value, str) and _CONTROL_CHAR_RE.search(value):
+            raise ValueError(
+                f"LLM new_case {spec.get('temp_id')!r} for {feature_name} has a "
+                f"garbled {field!r}: {value!r}"
+            )
+
+
 def augment_matrix(matrix: TestCaseMatrix, feature: Feature, client: ChatClient) -> TestCaseMatrix:
     """Ask the LLM to propose extra cases and rank the full case set.
 
@@ -159,6 +179,8 @@ def augment_matrix(matrix: TestCaseMatrix, feature: Feature, client: ChatClient)
             f"LLM new_cases temp_ids collide with existing case ids for {matrix.feature_name}: "
             f"{colliding}"
         )
+    for spec in new_case_specs:
+        _reject_garbled_text(spec, matrix.feature_name)
 
     new_cases = [
         _build_new_case(matrix.feature_name, i, spec) for i, spec in enumerate(new_case_specs, start=1)
