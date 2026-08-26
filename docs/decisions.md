@@ -69,7 +69,41 @@
 
 ## Track C — 규칙 기반 매트릭스 생성 (② 테스트 케이스 매트릭스 생성)
 
-*(아직 작성된 항목 없음)*
+### 규칙 기반 케이스 도출 구조 채택 (derive_* + build_case_matrix)
+- **무엇을 결정했나**: `case_generator/`에 `derive_normal_cases`, `derive_boundary_cases`, `derive_failure_cases`, `derive_security_cases` 4개 규칙 함수와 이를 조합하는 `build_case_matrix`를 구현. Feature의 constraints, exceptions, 인증 요구사항을 근거로 케이스를 규칙 기반으로 도출하도록 함.
+- **왜** (고려했던 대안 포함): analyzer(Track A/B)의 실제 구현체가 나오기 전에 case_generator 개발을 먼저 진행할 수 있도록, 합의된 JSON 계약 구조를 따르는 임시 Feature/Endpoint 모델을 analyzer/models.py에 먼저 추가해 병행 개발. 각 요청을 실제로 구성할 수 있도록 `payload.py`에서 sample_payload를 함께 생성하고, TestCaseMatrix에는 analyzer/case_generator 간 합의된 계약에 맞춰 endpoint/method 필드를 포함.
+- **트레이드오프**: 병행 개발을 위해 만든 임시 모델을 되돌리는 과정(revert)에서 case_generator가 이미 참조하고 있던 필드(sample_payload, endpoint/method)가 함께 삭제되어 TypeError가 발생, 별도 커밋으로 복구해야 했음. 병행 개발은 속도를 얻는 대신 계약이 확정되기 전까지 이런 동기화 비용을 감수해야 함.
+- **관련 이슈/PR**: #20 (feature/case-matrix)
+
+### case_generator 자체 모델을 schema.py 기준으로 통일
+- **무엇을 결정했나**: case_generator가 schema.py 대신 자체 models.py(dataclass 기반 TestCase/TestCaseMatrix/TestCaseCategory)를 따로 정의해 쓰던 구조를 schema.py(pydantic BaseModel) 기준으로 통일. `rules/{normal,boundary,failure,security}.py`의 import를 `schema.CaseCategory`/`CaseSource`/`TestCase`로 교체하고 source에 `CaseSource.RULE`을 명시, 참조가 없어진 `case_generator/models.py`는 삭제.
+- **왜** (고려했던 대안 포함): writer.py, selection.py처럼 schema 타입의 `model_dump()`/`model_copy()`에 의존하는 다운스트림 코드에 case_generator 결과가 연결되면 AttributeError가 발생하는 구조였고, `schema.TestCase.source`가 기본값 없는 필수 필드라 기존 rule 생성 코드를 그대로 넘기면 ValidationError도 나는 상황이었음. 두 모델을 계속 따로 유지하는 대안도 있었지만, 다운스트림 코드가 늘어날수록 변환 계층 비용이 커진다고 판단해 계약을 하나로 합침.
+- **트레이드오프**: rules/* 4개 파일을 전부 수정해야 했지만, 기존 테스트가 모두 통과함을 확인해 회귀 없이 정리.
+- **관련 이슈/PR**: #32 (Fixes), PR #40
+
+### Constraint.location 기준으로 payload 구성 범위 제한
+- **무엇을 결정했나**: `build_valid_payload`가 위치 구분 없이 모든 constraint를 payload에 채우던 것을, `location`이 BODY인 constraint만 필터링해서 구성하도록 수정. `derive_boundary_cases`는 `feature.constraints_in(ParamLocation.BODY)`로 순회 범위를 body 제약으로 한정하고, `derive_failure_cases`는 `exc.resolved`가 False인(=expected_status 확정 불가) 예외는 스킵하도록 함.
+- **왜** (고려했던 대안 포함): Track A/B에서 `Constraint.location`(path/query/header/cookie/body 구분) 필드가 추가된 이후에도 payload 생성 로직이 이를 반영하지 못해, query/header/path 값까지 body(sample_payload)에 섞여 들어갔음. 그 결과 GET/DELETE나 인증이 필요한 엔드포인트에서 생성된 pytest가 실제로는 통과해야 할 케이스인데도 422/404로 깨지는 문제가 있었음.
+- **트레이드오프**: query/header/cookie 파라미터를 실제 요청에 실어 보내는 기능(TestCase 필드 신설 + Jinja 템플릿 반영)은 이번 수정 범위 밖으로 남기고 별도 이슈로 분리 — body 외 위치 값을 "요청에 반영"하는 것과 "payload에 안 섞이게 막는 것"을 별개 문제로 다뤄, 수정 범위를 좁게 유지.
+- **관련 이슈/PR**: #28 (Fixes)
+
+### path_params 필드 추출 로직 추가
+- **무엇을 결정했나**: `case_generator/payload.py`에 `build_path_params()` 헬퍼를 추가해 `endpoint.path`에서 `{name}` 패턴을 정규식으로 추출. normal/boundary/failure/security 4개 규칙 함수 모두에서 TestCase 생성 시 path_params를 채우도록 수정.
+- **왜** (고려했던 대안 포함): 매트릭스 스키마에 `path_params` 필드는 먼저 추가돼 있었지만(Track E 결정), 실제 값을 채워 넣는 추출 로직은 case_generator 쪽에 아직 반영되지 않은 상태였음. `GET /api/users/{user_id}`처럼 경로에 placeholder가 있는 엔드포인트를 커버하려면 4개 규칙 함수 모두 이 로직을 공유해야 했음.
+- **트레이드오프**: 없음 — 필드를 채우는 로직만 추가된 것이라 기존 케이스와 하위 호환.
+- **관련 이슈/PR**: PR #19 이후 커밋
+
+### allowed_values(enum) boundary 케이스 처리 추가
+- **무엇을 결정했나**: `Constraint.allowed_values` 제약이 boundary 케이스 생성에서 누락돼 있던 것을 추가. 허용 목록에 없는 값을 넣었을 때 422가 나오는지 검증하는 `invalid_choice` 케이스를 신설. `_valid_value`가 `allowed_values`를 최우선으로 고려하도록 수정해, enum 제약이 걸린 필드도 정상(NORMAL) 케이스에서 유효한 값을 갖도록 함. 동시에 `build_invalid_payload`의 `below_min_length`/`above_max_length`가 constraint의 실제 min/max 값을 기준으로 정확한 경계값을 생성하도록 수정.
+- **왜** (고려했던 대안 포함): enum(허용값 목록) 제약을 가진 필드에 대한 케이스 생성 규칙이 애초에 규칙 목록에서 빠져 있었음. NORMAL 케이스에서 `_valid_value`가 allowed_values를 고려하지 않으면, enum 필드가 있는 엔드포인트는 정상 케이스조차 422로 실패하는 부작용이 있었음.
+- **트레이드오프**: 없음 — 기존 규칙에 조건 분기 하나를 추가하는 형태라 다른 케이스 생성 로직에 영향 없음.
+- **관련 이슈/PR**: PR #12 이후 커밋
+
+### success_status_code 처리 정합성 확보 (2단계 수정)
+- **무엇을 결정했나**: 1차로 `derive_normal_cases`가 NORMAL 케이스의 `expected_status`를 항상 200으로 고정하던 것을 `feature.endpoint.success_status_code` 기준으로 바꿈. 이후 이 수정이 `success_status_code or 200` 형태였던 탓에 "분석 실패로 None이 반환된 경우"까지 200으로 뭉개버리는 2차 버그를 발견해, `or 200`을 제거하고 None을 그대로 전달하도록 재수정.
+- **왜** (고려했던 대안 포함): `status_code=204`로 선언된 DELETE 같은 라우트도 항상 200을 기대해, 생성된 pytest가 실제 응답(204)과 어긋나 실패하는 문제가 있었음. 1차 수정 이후에도 "해석 실패(None)"와 "성공 코드 없음(200 확정)"이라는 서로 다른 두 상황이 `or 200` 한 줄로 뭉뚱그려져, 분석이 실패한 상황이 조용히 잘못된 기대값(200)으로 둔갑하는 문제가 남아 있었음. 잘못된 값을 임의로 확정하지 않고 None을 그대로 흘려보내는 쪽을 선택.
+- **트레이드오프**: `render.py`/`test_case.py.j2` 템플릿은 이미 `expected_status=None`을 "-" 표시 및 `pytest.skip`으로 안전하게 처리하고 있어, 템플릿 쪽 추가 수정은 필요 없었음.
+- **관련 이슈/PR**: #36 (Fixes), PR #43
 
 ---
 
