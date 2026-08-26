@@ -39,7 +39,7 @@ def test_generate_writes_pytest_module(tmp_path):
     result = runner.invoke(
         app,
         ["generate", str(FIXTURE_PATH), "--output", str(output_path)],
-        input="1,2\n1\n",
+        input="1,2,7\n",
     )
 
     assert result.exit_code == 0, result.output
@@ -63,7 +63,7 @@ def test_generate_reprompts_on_invalid_input(tmp_path):
     result = runner.invoke(
         app,
         ["generate", str(FIXTURE_PATH), "--output", str(output_path)],
-        input="not-a-number\n1\n1\n",
+        input="not-a-number\n1\n",
     )
 
     assert result.exit_code == 0, result.output
@@ -112,7 +112,7 @@ def test_run_executes_full_pipeline():
         result = runner.invoke(
             app,
             ["run", str(DEMO_APP_ROOT), "--output", str(output_path)],
-            input="1\n" * 4,  # demo_app의 4개 feature(delete_account, get_user_profile, login, update_user_profile) 각각 1번 케이스 선택
+            input="1,3,7,12\n",  # global indices for each matrix's local case #1 (delete_account, get_user_profile, login, update_user_profile)
         )
 
         assert result.exit_code == 0, result.output

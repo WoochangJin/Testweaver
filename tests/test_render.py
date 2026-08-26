@@ -55,6 +55,24 @@ def test_render_matrix_numbers_cases_continuously_across_categories():
     assert row_number(profile_output, "profile-001") == "1"  # numbering resets per matrix
 
 
+def test_render_matrices_numbers_continue_across_matrices():
+    matrices = load_matrices(FIXTURE_PATH)
+
+    def row_number(output: str, case_id: str) -> str:
+        match = re.search(rf"(\d+)\D*{case_id}", output)
+        assert match, f"row for {case_id} not found"
+        return match.group(1)
+
+    console = Console(record=True, width=120)
+    render_matrices(matrices, console=console)
+    output = console.export_text()
+    assert row_number(output, "login-004") == "6"  # last login row
+    assert row_number(output, "profile-001") == "7"  # continues past login's 6
+    assert row_number(output, "profile-003") == "8"
+    assert row_number(output, "profile-002") == "9"
+    assert row_number(output, "profile-004") == "10"
+
+
 def test_render_matrix_shows_path_params():
     matrices = load_matrices(FIXTURE_PATH)
     profile = matrices[1]

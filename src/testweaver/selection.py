@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from testweaver.grouping import order_cases_for_selection
-from testweaver.schema import TestCaseMatrix
+from testweaver.schema import FeatureMatrices, TestCaseMatrix
 
 
 def parse_selection(text: str) -> set[int]:
@@ -53,3 +53,25 @@ def select_cases(matrix: TestCaseMatrix, indices: set[int]) -> TestCaseMatrix:
         for case in matrix.cases
     ]
     return matrix.model_copy(update={"cases": updated_cases})
+
+
+def select_cases_globally(matrices: FeatureMatrices, indices: set[int]) -> FeatureMatrices:
+    """Return copies of matrices with only the given global display indices marked selected.
+
+    Global display indices are 1-based and continue across matrix boundaries, matching
+    render_matrices' numbering (each matrix picks up where the previous one left off).
+    Replaces each matrix's selection entirely: cases not in `indices` come back
+    selected=False regardless of their prior value.
+    """
+    total = sum(len(matrix.cases) for matrix in matrices)
+    out_of_range = {i for i in indices if i < 1 or i > total}
+    if out_of_range:
+        raise ValueError(f"selection out of range 1-{total}: {sorted(out_of_range)}")
+
+    updated_matrices = []
+    offset = 0
+    for matrix in matrices:
+        local_indices = {i - offset for i in indices if offset < i <= offset + len(matrix.cases)}
+        updated_matrices.append(select_cases(matrix, local_indices))
+        offset += len(matrix.cases)
+    return updated_matrices

@@ -9,21 +9,21 @@ from rich.console import Console
 from testweaver import pipeline
 from testweaver.analyzer.models import NoteLevel
 from testweaver.loader import load_matrices
-from testweaver.render import render_matrix
-from testweaver.schema import TestCaseMatrix
-from testweaver.selection import parse_selection, select_cases
+from testweaver.render import render_matrices
+from testweaver.schema import FeatureMatrices
+from testweaver.selection import parse_selection, select_cases_globally
 from testweaver.writer import write_matrices
 
 app = typer.Typer(add_completion=False)
 
 
-def _select_matrix_interactively(matrix: TestCaseMatrix, console: Console) -> TestCaseMatrix:
-    render_matrix(matrix, console)
+def _select_matrices_interactively(matrices: FeatureMatrices, console: Console) -> FeatureMatrices:
+    render_matrices(matrices, console)
     while True:
-        raw = typer.prompt(f"Select case numbers for {matrix.feature_name}")
+        raw = typer.prompt("Select case numbers")
         try:
             indices = parse_selection(raw)
-            return select_cases(matrix, indices)
+            return select_cases_globally(matrices, indices)
         except ValueError as exc:
             typer.echo(f"Invalid selection: {exc}", err=True)
 
@@ -61,7 +61,7 @@ def generate(
     """Load a matrix, let the user pick cases, and generate a pytest module."""
     matrices = load_matrices(matrix_path)
     console = Console()
-    selected = [_select_matrix_interactively(matrix, console) for matrix in matrices]
+    selected = _select_matrices_interactively(matrices, console)
 
     code = pipeline.generate_pytest_module(selected)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +99,7 @@ def run(
         raise typer.Exit(code=1)
 
     matrices = pipeline.build_matrices(result.features)
-    selected = [_select_matrix_interactively(matrix, console) for matrix in matrices]
+    selected = _select_matrices_interactively(matrices, console)
 
     code = pipeline.generate_pytest_module(selected)
     output.parent.mkdir(parents=True, exist_ok=True)
