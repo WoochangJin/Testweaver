@@ -1,10 +1,11 @@
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
-from testweaver import app, pipeline
+from testweaver import _ensure_utf8_console, app, pipeline
 from testweaver.analyzer.models import AnalysisNote, AnalysisResult, NoteCode, NoteLevel
 from testweaver.loader import load_matrices
 
@@ -56,6 +57,35 @@ def test_generate_writes_pytest_module(tmp_path):
 
     # generate writes straight to the pytest module — no intermediate matrix file
     assert list(tmp_path.iterdir()) == [output_path]
+
+
+def test_generate_all_flag_selects_every_case_without_prompting(tmp_path):
+    output_path = tmp_path / "test_generated.py"
+    result = runner.invoke(
+        app,
+        ["generate", str(FIXTURE_PATH), "--output", str(output_path), "--all"],
+    )
+
+    assert result.exit_code == 0, result.output
+    code = output_path.read_text(encoding="utf-8")
+    # every selected: true case across both features should be rendered,
+    # with no "Select case numbers" prompt in between
+    assert "Select case numbers" not in result.output
+    assert "def test_login_001" in code
+    assert "def test_profile_004" in code
+
+
+def test_generate_none_keyword_selects_nothing(tmp_path):
+    output_path = tmp_path / "test_generated.py"
+    result = runner.invoke(
+        app,
+        ["generate", str(FIXTURE_PATH), "--output", str(output_path)],
+        input="none\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    code = output_path.read_text(encoding="utf-8")
+    assert "def test_" not in code
 
 
 def test_generate_reprompts_on_invalid_input(tmp_path):
@@ -119,6 +149,20 @@ def test_run_executes_full_pipeline():
         assert output_path.exists()
     finally:
         shutil.rmtree(output_dir, ignore_errors=True)
+
+
+def test_ensure_utf8_console_noop_on_non_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    _ensure_utf8_console()  # must not touch the Windows-only ctypes.windll API
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only behavior")
+def test_ensure_utf8_console_sets_utf8_encoding_on_windows():
+    _ensure_utf8_console()
+
+    assert sys.stdout.encoding.lower() == "utf-8"
+    assert sys.stderr.encoding.lower() == "utf-8"
 
 
 def test_run_exits_before_generate_on_analysis_error(tmp_path, monkeypatch):

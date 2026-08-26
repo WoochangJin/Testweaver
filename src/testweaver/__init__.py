@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -17,12 +18,35 @@ from testweaver.writer import write_matrices
 app = typer.Typer(add_completion=False)
 
 
-def _select_matrices_interactively(matrices: FeatureMatrices, console: Console) -> FeatureMatrices:
+def _ensure_utf8_console() -> None:
+    """Force UTF-8 I/O on Windows so non-ASCII output doesn't get mangled.
+
+    Windows consoles default to a locale codepage (e.g. cp949), not UTF-8.
+    Without this, case ids/descriptions containing non-ASCII text render as
+    mojibake (or raise UnicodeEncodeError) unless the user manually sets
+    PYTHONUTF8=1 or runs `chcp 65001` first.
+    """
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+    ctypes.windll.kernel32.SetConsoleCP(65001)
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
+
+def _select_matrices_interactively(
+    matrices: FeatureMatrices, console: Console, select_all: bool = False
+) -> FeatureMatrices:
     render_matrices(matrices, console)
+    total = sum(len(matrix.cases) for matrix in matrices)
+    if select_all:
+        return select_cases_globally(matrices, parse_selection("all", total))
     while True:
         raw = typer.prompt("Select case numbers")
         try:
-            indices = parse_selection(raw)
+            indices = parse_selection(raw, total)
             return select_cases_globally(matrices, indices)
         except ValueError as exc:
             typer.echo(f"Invalid selection: {exc}", err=True)
@@ -58,11 +82,14 @@ def generate(
     output: Annotated[
         Path, typer.Option("--output", "-o", help="Where to write the generated pytest module.")
     ] = Path("tests/generated/test_generated.py"),
+    select_all: Annotated[
+        bool, typer.Option("--all", help="Select every case without prompting.")
+    ] = False,
 ) -> None:
     """Load a matrix, let the user pick cases, and generate a pytest module."""
     matrices = load_matrices(matrix_path)
     console = Console()
-    selected = _select_matrices_interactively(matrices, console)
+    selected = _select_matrices_interactively(matrices, console, select_all=select_all)
 
     code = pipeline.generate_pytest_module(selected)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -87,6 +114,9 @@ def run(
     output: Annotated[
         Path, typer.Option("--output", "-o", help="Where to write the generated pytest module.")
     ] = Path("tests/generated/test_generated.py"),
+    select_all: Annotated[
+        bool, typer.Option("--all", help="Select every case without prompting.")
+    ] = False,
 ) -> None:
     """Analyze, generate, and run pytest end-to-end without intermediate files."""
     console = Console()
@@ -101,7 +131,7 @@ def run(
 
     matrices = pipeline.build_matrices(result.features)
     matrices = pipeline.augment_with_llm(matrices, result.features)
-    selected = _select_matrices_interactively(matrices, console)
+    selected = _select_matrices_interactively(matrices, console, select_all=select_all)
 
     code = pipeline.generate_pytest_module(selected)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +153,7 @@ def run(
 
 
 def main() -> None:
+    _ensure_utf8_console()
     app()
 
 
