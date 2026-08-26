@@ -6,8 +6,6 @@ these functions and each step stays testable without invoking Typer.
 """
 from __future__ import annotations
 
-from testweaver.conftest_generator import generate_conftest
-
 import re
 from pathlib import Path
 
@@ -16,6 +14,7 @@ import pytest
 from testweaver.analyzer.models import AnalysisResult, Feature
 from testweaver.analyzer.pipeline import analyze_project
 from testweaver.case_generator.matrix import build_case_matrix
+from testweaver.conftest_generator import generate_conftest
 from testweaver.generator import generate_test_module
 from testweaver.llm_augment import augment_matrices, get_llm_client
 from testweaver.schema import TestCase, TestCaseMatrix

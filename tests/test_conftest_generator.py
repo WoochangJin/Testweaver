@@ -12,6 +12,7 @@ of a live project. Create both fixture directories (see chat) before running.
 from pathlib import Path
 
 import pytest
+
 from testweaver.conftest_generator import (
     analyze_state,
     find_app_entrypoint,
