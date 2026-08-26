@@ -141,24 +141,24 @@ src/testweaver/
 ├── writer.py                  # 매트릭스 JSON 저장
 ├── schema.py                  # TestCase / TestCaseMatrix 스키마
 ├── analyzer/
-│   └── models.py               # Feature/Endpoint/Constraint 등 분석 결과 스키마
+│   └── models.py              # Feature/Endpoint/Constraint 등 분석 결과 스키마
 ├── case_generator/
-│   ├── matrix.py                # build_case_matrix: 4관점 케이스 종합
-│   ├── payload.py               # 유효/무효 요청 payload 생성
-│   └── rules/                   # normal/boundary/failure/security 도출 규칙
-├── generator.py                # 매트릭스 JSON → pytest 코드 생성기
+│   ├── matrix.py              # build_case_matrix: 4관점 케이스 종합
+│   ├── payload.py             # 유효/무효 요청 payload 생성
+│   └── rules/                 # normal/boundary/failure/security 도출 규칙
+├── generator.py               # 매트릭스 JSON → pytest 코드 생성기
 └── templates/
-    └── test_case.py.j2          # 생성기가 사용하는 jinja2 템플릿
+    └── test_case.py.j2        # 생성기가 사용하는 jinja2 템플릿
 
 tests/
-├── conftest.py                 # client fixture (TestClient + dependency_overrides)
+├── conftest.py                # client fixture (TestClient + dependency_overrides)
 ├── fixtures/
-│   ├── mock_matrix.json        # 테스트 케이스 매트릭스 샘플
-│   └── demo_app/                # 검증 전용 스텁 FastAPI 앱
-├── test_case_matrix.py         # 규칙 기반 케이스 도출 단위 테스트
-├── test_payload.py             # payload 빌더 단위 테스트
-├── test_cli.py                 # CLI 명령어 단위 테스트
-└── generated/                    # 생성기 출력 (git에 커밋되지 않음)
+│   ├── mock_matrix.json       # 테스트 케이스 매트릭스 샘플
+│   └── demo_app/              # 검증 전용 스텁 FastAPI 앱
+├── test_case_matrix.py        # 규칙 기반 케이스 도출 단위 테스트
+├── test_payload.py            # payload 빌더 단위 테스트
+├── test_cli.py                # CLI 명령어 단위 테스트
+└── generated/                 # 생성기 출력 (git에 커밋되지 않음)
 ```
 
 ## 테스트
