@@ -147,6 +147,19 @@ def augment_matrix(matrix: TestCaseMatrix, feature: Feature, client: ChatClient)
     raw = _request_augmentation(client, feature, matrix.cases)
     new_case_specs = raw["new_cases"]
 
+    temp_ids = [spec["temp_id"] for spec in new_case_specs]
+    if len(temp_ids) != len(set(temp_ids)):
+        raise ValueError(
+            f"LLM new_cases for {matrix.feature_name} contains duplicate temp_ids: {temp_ids}"
+        )
+    existing_ids = {case.id for case in matrix.cases}
+    colliding = existing_ids & set(temp_ids)
+    if colliding:
+        raise ValueError(
+            f"LLM new_cases temp_ids collide with existing case ids for {matrix.feature_name}: "
+            f"{colliding}"
+        )
+
     new_cases = [
         _build_new_case(matrix.feature_name, i, spec) for i, spec in enumerate(new_case_specs, start=1)
     ]

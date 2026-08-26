@@ -126,6 +126,58 @@ def test_augment_matrix_rejects_priority_order_with_duplicates():
         augment_matrix(matrix, _mock_feature(), client)
 
 
+def test_augment_matrix_rejects_new_case_temp_id_colliding_with_existing_case_id():
+    matrix = SchemaTestCaseMatrix(
+        feature_name="register",
+        endpoint="/users",
+        method="POST",
+        cases=[_rule_case("register-1"), _rule_case("register-2")],
+    )
+    client = _FakeClient(
+        {
+            "new_cases": [
+                {
+                    "temp_id": "register-1",  # collides with an existing rule case id
+                    "category": "security",
+                    "description": "duplicate id case",
+                    "expected_status": None,
+                    "expected_error_code": None,
+                    "sample_payload": None,
+                    "path_params": None,
+                }
+            ],
+            "priority_order": ["register-1", "register-2"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="collide with existing case ids"):
+        augment_matrix(matrix, _mock_feature(), client)
+
+
+def test_augment_matrix_rejects_duplicate_temp_ids_among_new_cases():
+    matrix = SchemaTestCaseMatrix(
+        feature_name="register", endpoint="/users", method="POST", cases=[_rule_case("register-1")]
+    )
+    new_case_spec = {
+        "temp_id": "llm-a",
+        "category": "security",
+        "description": "dup temp id",
+        "expected_status": None,
+        "expected_error_code": None,
+        "sample_payload": None,
+        "path_params": None,
+    }
+    client = _FakeClient(
+        {
+            "new_cases": [new_case_spec, new_case_spec],
+            "priority_order": ["register-1", "llm-a"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="duplicate temp_ids"):
+        augment_matrix(matrix, _mock_feature(), client)
+
+
 def test_augment_matrix_does_not_mutate_original_matrix():
     matrix = SchemaTestCaseMatrix(
         feature_name="register", endpoint="/users", method="POST", cases=[_rule_case("register-1")]
