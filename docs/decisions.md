@@ -109,6 +109,30 @@
 
 ## Track D — LLM 보강 (② LLM 보강) + CLI (③ 사용자 조합 기반 테스트 생성)
 
+### 케이스 선택 문법과 표시 순서를 단일 정렬 함수에 위임
+- **무엇을 결정했나**: 사용자가 케이스를 행 번호로 고르도록 `parse_selection`이 콤마 구분 번호·범위(`1,3,5-7`)와 대소문자 무시 키워드 `all`/`none`을 받게 함. 매트릭스는 feature 단위로 하나씩(`render_matrix`) 패널로 출력하고, 한 매트릭스 안에서는 `group_cases_by_category`로 카테고리별(NORMAL→BOUNDARY→FAILURE→SECURITY)로 묶음. 표시용 인덱스(1-based)와 선택 해석은 둘 다 `order_cases_for_selection` 하나만 거치도록 강제.
+- **왜** (고려했던 대안 포함): 매트릭스 JSON을 그대로 보여주고 케이스 id를 입력받는 방식은 사람이 쓰기 어려움. 표의 행 번호로 고르게 하려면 화면 정렬 순서와 선택 해석 순서가 반드시 일치해야 하는데, 렌더링과 선택이 각자 정렬을 구현하면 어긋날 수 있어 두 경로가 같은 함수에 위임하도록 함. 범위(`5-7`)·전체(`all`)·해제(`none`)는 흔한 패턴이라 문법으로 지원.
+- **트레이드오프**: 표시 인덱스↔케이스 매핑이 `order_cases_for_selection`에 의존하므로, 정렬 규칙을 바꾸면 렌더링·선택을 함께 재검증해야 함 (#38에서 priority 정렬을 이 함수에 추가할 때 실제로 두 경로를 같이 확인).
+- **관련 이슈/PR**: #5 (feature/cli-select, PR #23)
+
+### `select` 단일 명령어를 analyze / generate / test / run으로 재편
+- **무엇을 결정했나**: 매트릭스 JSON을 읽어 케이스를 고르고 결과를 다시 JSON에 되쓰던 `select` 명령어를 없애고, CLI를 `analyze`(프로젝트 → 매트릭스 JSON), `generate`(매트릭스 JSON → 대화형 선택 → pytest 모듈), `test`(생성된 pytest를 in-process 실행), `run`(위 셋을 중간 파일 없이 한 번에)으로 재편. 사용자 선택은 독립 명령어로 노출하지 않고 `generate`/`run` 안의 대화형 프롬프트로 흡수. orchestration 로직은 Typer 인자 파싱과 분리해 `pipeline.py`에 둠.
+- **왜** (고려했던 대안 포함): (1) `generate`/`select`/`test`처럼 내부 구현 단계를 그대로 명령어로 노출하기보다 사용자 관점에서 자연스러운 단위로 묶는 게 낫다고 판단 — select는 generate의 일부지 별도 산출물이 아님. (2) 각 단계를 파일 입출력으로만 분리하는 안과 전체를 한 번에만 실행하는 안 중 양쪽을 다 살림: 개발·디버깅 때는 단계별로 독립 실행하며 중간 매트릭스 JSON을 확인하고, 실제 사용자는 `run` 한 번으로 끝냄. (3) case_generator가 만든 케이스를 전부 자동으로 pytest에 넘기지 않고 feature별로 사람에게 보여주고 고르게 하는 human-in-the-loop 구조는 유지 — 자동 생성기가 만든 불필요·부적절한 케이스를 사용자가 걸러낼 수 있음. `run`은 TestWeaver에서 처음으로 analyze → build_matrices → 선택 → pytest 생성·실행 전체가 실제로 이어진 지점.
+- **트레이드오프**: 테스트해야 할 CLI 실행 경로가 늘어남(4개 명령어 + `run` 조합). 기존 `select`가 하던 "선택 결과를 매트릭스 JSON에 되쓰기"를 버리고 pytest를 바로 출력하도록 바꿔, 선택 상태를 파일로 보존해 재사용하는 워크플로는 포기. 생성과 선택이라는 서로 다른 책임이 `generate` 한 명령어에 들어감.
+- **관련 이슈/PR**: #31 (feature/cli-integration, PR #39)
+
+### case_generator 출력을 pytest 렌더링용으로 정규화하는 계층을 pipeline에 둠
+- **무엇을 결정했나**: `pipeline._normalize_case`가 case_generator가 낸 `TestCase`를 그대로 쓰지 않고 (1) `id`의 `::` 계층 구분자를 identifier-safe 문자로 치환하고, (2) bodyless 메서드(GET/DELETE/HEAD/OPTIONS)에서는 `sample_payload`를 `None`으로 비운 복사본을 만들어 넘기도록 함.
+- **왜** (고려했던 대안 포함): case_generator의 id 규칙(`::` 구분)과 payload 생성 방식(메서드 무관하게 sample_payload 채움)은 case_generator 자체 계약상 정상인데, `generator.py`의 pytest 함수명에는 `::`가 못 들어가고 httpx `TestClient.get()`/`delete()` 등은 json body를 받지 않음. case_generator를 직접 고쳐 D 쪽 요구를 반영하는 대신 통합 계층에서 `model_copy`로 정규화해 트랙 간 결합도를 낮춤 — 어떤 필드를 왜 바꾸는지가 `_normalize_case` 한 곳에 드러남.
+- **트레이드오프**: 통합 지점에 case_generator 출력을 손보는 코드가 한 겹 생김. case_generator가 이 제약(identifier-safe id, 메서드별 payload)을 직접 만족하게 되면 이 계층은 제거 대상.
+- **관련 이슈/PR**: #31
+
+### 전체 파이프라인 E2E 테스트 도입 + 잠복 결함을 xfail(strict=True)로 명시
+- **무엇을 결정했나**: `runner.invoke(app, ["run", DEMO_APP_ROOT, ...], input=...)`로 실제 demo FastAPI 프로젝트에 사용자 선택까지 흉내 내는 end-to-end 테스트를 추가. `run` 연결 직후 이 테스트에서 드러난 두 결함 — NORMAL 케이스가 `expected_status`를 무조건 200으로 생성(→ 204 endpoint 실패), 타입 없는 `dict` body 파라미터에서 유효한 login payload를 만들지 못함(→ 422) — 을 CLI에서 보정하거나 테스트를 지우지 않고 `@pytest.mark.xfail(..., strict=True)`로 남기고 #36/#37로 별도 추적.
+- **왜** (고려했던 대안 포함): 각 단계 unit test가 다 통과해도 전체를 이으면 드러나는 문제가 있으므로 통합 경로 자체를 테스트해야 함. 실패를 CLI 버그로 오해하지 않도록 (a) CLI 테스트가 통과하게 억지 보정, (b) E2E 테스트 삭제, (c) skip, (d) 알려진 upstream 문제로 명시 중 (d)를 택함 — D가 다른 트랙의 결함을 몰래 보정해 소유권을 섞지 않고, 통합 테스트는 유지하면서 현재 시스템의 한계를 명시적으로 기록. `strict=True`라 #36/#37이 고쳐져 테스트가 XPASS하면 CI가 알려주고, 그때 xfail을 제거할 수 있음.
+- **트레이드오프**: 통합 테스트가 실제 pytest 실행까지 포함해 느리고, xfail이 붙어 있는 동안은 그 경로의 회귀를 자동으로 못 잡음.
+- **관련 이슈/PR**: #31 (PR #39), #36, #37 — #36은 Track C의 "success_status_code 처리 정합성 확보" 항목에서도 다뤄짐
+
 ### CLI 선택 프롬프트를 매트릭스별 → 전역 단일 프롬프트로 변경
 - **무엇을 결정했나**: `generate`/`run` 커맨드에서 매트릭스마다 반복하던 선택 프롬프트 루프(`_select_matrix_interactively`)를 없애고, 모든 매트릭스를 `render_matrices`로 한 번에 출력한 뒤 `typer.prompt`로 전체에 대해 한 번만 입력받아 반영하도록 변경. 이를 위해 `render_matrix`가 매트릭스마다 1로 리셋하던 행 번호를 `render_matrices`가 이어서 넘길 수 있도록 `start_index` 파라미터를 추가하고, `selection.py`에 여러 매트릭스에 걸친 전역 인덱스를 처리하는 `select_cases_globally`를 추가.
 - **왜** (고려했던 대안 포함): 매트릭스 수만큼 프롬프트를 반복하는 것은 사용자 입력 횟수만 늘릴 뿐 실익이 적다고 판단. 우선순위 지정처럼 다른 목적의 프롬프트 분리는 이 결정과 별개 트랙에서 다룸. `select_cases_globally`는 순서·선택 로직을 새로 만들지 않고, 전체 인덱스 범위를 먼저 검증한 뒤 매트릭스별 오프셋만큼 로컬 인덱스로 변환해 기존 `select_cases`에 위임하는 방식을 택함 — 매트릭스 단일용 `select_cases`/`order_cases_for_selection`은 그대로 재사용.
@@ -146,6 +170,18 @@
 - **트레이드오프**: 카테고리별로 시각적으로 구획된 표를 보던 기존 UI는 포기. `render_matrices`의
   연속 행 번호(#44)와 `select_cases_globally`는 구조 변경 없이 그대로 재사용됨.
 - **관련 이슈/PR**: #38
+
+### CLI 출력·비대화식 옵션과 Windows 콘솔 인코딩 통일
+- **무엇을 결정했나**: 모든 명령어의 출력 경로 옵션을 `--output`/`-o`로 통일. 프롬프트 없이 전량 선택하는 `--all` 플래그를 `generate`/`run`에 추가. `main()` 진입 시 `_ensure_utf8_console()`로 Windows에서 콘솔 코드페이지를 UTF-8(65001)로 강제하고 `sys.stdout`/`stderr`를 재설정.
+- **왜** (고려했던 대안 포함): 명령어마다 옵션명을 따로 만드는 대신 기존 select CLI의 `--output`/`-o` 관례를 유지해 일관된 CLI UX 확보. Windows 콘솔은 기본 로케일 코드페이지(cp949 등)라 비ASCII 케이스 id·설명이 mojibake로 나오거나 `UnicodeEncodeError`가 남 — 사용자가 `PYTHONUTF8=1`이나 `chcp 65001`을 직접 하지 않아도 되게 진입점에서 처리. `--all`은 CI·스크립트에서 대화형 프롬프트 없이 파이프라인을 돌리기 위함.
+- **트레이드오프**: `_ensure_utf8_console`가 `ctypes.windll` 등 Windows 전용 API를 직접 만져 플랫폼 분기와 그 자체의 테스트(비Windows no-op, Windows 전용)가 필요함.
+- **관련 이슈/PR**: PR #55 (feat/cli-select-all-and-win-utf8-console)
+
+### LLM 응답의 계약 위반을 보정 없이 거부 (temp_id 검증 + 깨진 텍스트)
+- **무엇을 결정했나**: LLM이 제안한 `new_cases`에 대해 temp_id 중복·기존 케이스 id와의 충돌을 `ValueError`로 거부하고, `description`/`expected_error_code`에 제어문자나 U+FFFD가 섞인 경우도 `_reject_garbled_text`로 거부. 보정하지 않고 augmentation 자체를 실패시킴.
+- **왜** (고려했던 대안 포함): `generator.py`가 `description`을 pytest docstring에 그대로 삽입하므로 NUL 바이트가 들어가면 생성된 `.py`에 리터럴 NUL이 박혀 `ast.parse`가 깨짐(gpt-4o-mini가 비ASCII 설명 생성 시 mojibake를 내는 사례 관찰됨). 계약을 만족하지 않는 입력은 보정하지 않고 검증 오류로 처리한다는 프로젝트 원칙(`CLAUDE.md`)을 LLM 출력에도 그대로 적용. 기존 #38 항목의 `priority_order` 커버리지 검증과 같은 계열의 결정.
+- **트레이드오프**: LLM이 부분적으로 유용한 응답을 줘도 한 필드라도 기준 미달이면 그 매트릭스의 보강을 통째로 버림.
+- **관련 이슈/PR**: PR #56 (fix/reject-garbled-llm-text), 커밋 `9c030d7`
 
 ---
 
